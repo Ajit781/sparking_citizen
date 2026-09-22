@@ -19,7 +19,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CivicNavbar from '../components/CivicNavbar';
 import Geolocation from '@react-native-community/geolocation';
 import ImageCropPicker from 'react-native-image-crop-picker';
-import InAppCamera from '../components/InAppCamera';
 import { colors } from '../theme/colors';
 import { citizenService, calculateProfileCompletion } from '../services/citizenService';
 import { storageService, UserSession } from '../services/storageService';
@@ -56,7 +55,6 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
   // Success Modal State
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
-  const [showInAppCamera, setShowInAppCamera] = useState(false);
   const [successName, setSuccessName] = useState('');
 
   // Dynamic progress calculation
@@ -209,29 +207,27 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
     const hasPermission = await requestCameraPermission();
     if (!hasPermission) return;
     setShowImagePicker(false);
-    setShowInAppCamera(true);
-  };
+    
+    setTimeout(async () => {
+      try {
+        const image = await ImageCropPicker.openCamera({
+          mediaType: 'photo',
+          includeBase64: true,
+          compressImageQuality: 0.8,
+          compressImageMaxWidth: 800,
+          compressImageMaxHeight: 800,
+        });
 
-  const handleInAppCameraCapture = async (path: string) => {
-    setShowInAppCamera(false);
-    try {
-      const image = await ImageCropPicker.openCropper({
-        path,
-        mediaType: 'photo',
-        includeBase64: true,
-        compressImageQuality: 0.8,
-        width: 800,
-        height: 800,
-      });
-
-      if (image.data) {
-        setProfilePic(image.data);
+        if (image.data) {
+          setProfilePic(image.data);
+        }
+      } catch (e: any) {
+        if (e.code !== 'E_PICKER_CANCELLED' && e.message !== 'User cancelled image selection') {
+          console.error('Camera capture error: ', e);
+          Alert.alert('Error', 'Failed to capture photo from camera.');
+        }
       }
-    } catch (e: any) {
-      if (e.message !== 'User cancelled image selection') {
-        Alert.alert('Crop Error', 'Failed to crop image.');
-      }
-    }
+    }, 500);
   };
 
   const handlePickPhoto = () => {
@@ -571,14 +567,6 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
             </Pressable>
           </View>
         </View>
-      </Modal>
-
-      {/* ================= 9. IN-APP CAMERA MODAL ================= */}
-      <Modal visible={showInAppCamera} animationType="slide" onRequestClose={() => setShowInAppCamera(false)}>
-        <InAppCamera
-          onCapture={handleInAppCameraCapture}
-          onCancel={() => setShowInAppCamera(false)}
-        />
       </Modal>
 
       {/* ================= IMAGE PICKER ACTION SHEET ================= */}

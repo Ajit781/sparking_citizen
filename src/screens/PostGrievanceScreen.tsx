@@ -18,7 +18,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Geolocation from '@react-native-community/geolocation';
 import MapView, { Marker } from 'react-native-maps';
 import ImageCropPicker from 'react-native-image-crop-picker';
-import InAppCamera from '../components/InAppCamera';
 import UmangSkylineFooter from '../components/UmangSkylineFooter';
 import CarLoader from '../components/CarLoader';
 import ImagePickerActionSheet from '../components/ImagePickerActionSheet';
@@ -56,7 +55,6 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
   const [locationCoords, setLocationCoords] = useState<{ lat: number; lng: number }>({ lat: 22.5726, lng: 88.3639 });
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
-  const [showInAppCamera, setShowInAppCamera] = useState(false);
   const [successTicket, setSuccessTicket] = useState('');
   const [isLocating, setIsLocating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -123,27 +121,27 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
       }
     }
     setShowImagePicker(false);
-    setShowInAppCamera(true);
-  };
+    
+    setTimeout(async () => {
+      try {
+        const image = await ImageCropPicker.openCamera({
+          mediaType: 'photo',
+          includeBase64: true,
+          compressImageQuality: 0.3,
+          compressImageMaxWidth: 400,
+          compressImageMaxHeight: 400,
+        });
 
-  const handleInAppCameraCapture = async (path: string) => {
-    setShowInAppCamera(false);
-    try {
-      const image = await ImageCropPicker.openCropper({
-        path,
-        mediaType: 'photo',
-        includeBase64: true,
-        compressImageQuality: 0.3,
-        width: 400,
-        height: 400,
-      });
-
-      setPhotos(p => [...p, { uri: image.path, base64: image.data }].slice(0, 5));
-    } catch (e: any) {
-      if (e.message !== 'User cancelled image selection') {
-        console.warn(e);
+        if (image.path) {
+          setPhotos(p => [...p, { uri: image.path, base64: image.data }].slice(0, 5));
+        }
+      } catch (e: any) {
+        if (e.code !== 'E_PICKER_CANCELLED' && e.message !== 'User cancelled image selection') {
+          console.error('Camera capture error: ', e);
+          Alert.alert('Error', 'Failed to capture photo from camera.');
+        }
       }
-    }
+    }, 500);
   };
 
   const handleAddPhoto = () => {
@@ -650,14 +648,6 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
       )}
 
       <CarLoader visible={isSubmitting} message="Submitting Grievance..." />
-      {/* ================= 9. IN-APP CAMERA MODAL ================= */}
-      <Modal visible={showInAppCamera} animationType="slide" onRequestClose={() => setShowInAppCamera(false)}>
-        <InAppCamera
-          onCapture={handleInAppCameraCapture}
-          onCancel={() => setShowInAppCamera(false)}
-        />
-      </Modal>
-
     </View>
   );
 }

@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ImageCropPicker from 'react-native-image-crop-picker';
-import InAppCamera from '../components/InAppCamera';
 import UmangSkylineFooter from '../components/UmangSkylineFooter';
 import CarLoader from '../components/CarLoader';
 import ImagePickerActionSheet from '../components/ImagePickerActionSheet';
@@ -127,7 +126,6 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
   const [showColorModal, setShowColorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
-  const [showInAppCamera, setShowInAppCamera] = useState(false);
   const [vehicleImage, setVehicleImage] = useState<string>(
     vehicle?.vehicle_image && vehicle.vehicle_image !== DEFAULT_VEHICLE_IMAGE_BASE64
       ? vehicle.vehicle_image
@@ -161,29 +159,27 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
       return;
     }
     setShowImagePickerModal(false);
-    setShowInAppCamera(true);
-  };
+    
+    setTimeout(async () => {
+      try {
+        const image = await ImageCropPicker.openCamera({
+          mediaType: 'photo',
+          includeBase64: true,
+          compressImageQuality: 0.3,
+          compressImageMaxWidth: 400,
+          compressImageMaxHeight: 400,
+        });
 
-  const handleInAppCameraCapture = async (path: string) => {
-    setShowInAppCamera(false);
-    try {
-      const image = await ImageCropPicker.openCropper({
-        path,
-        mediaType: 'photo',
-        includeBase64: true,
-        compressImageQuality: 0.3,
-        width: 400,
-        height: 400,
-      });
-
-      if (image.data) {
-        setVehicleImage(image.data);
+        if (image.data) {
+          setVehicleImage(image.data);
+        }
+      } catch (e: any) {
+        if (e.code !== 'E_PICKER_CANCELLED' && e.message !== 'User cancelled image selection') {
+          console.error('Camera capture error: ', e);
+          Alert.alert('Error', 'Failed to capture photo from camera.');
+        }
       }
-    } catch (e: any) {
-      if (e.message !== 'User cancelled image selection') {
-        Alert.alert('Crop Error', 'Failed to crop image.');
-      }
-    }
+    }, 500);
   };
 
   const handlePickFromGallery = async () => {
