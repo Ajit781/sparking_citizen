@@ -1,0 +1,12 @@
+S-Parking Saffron Theme
+Primary: #F57C00
+Deep Saffron: #8A3B00
+Soft Saffron: #FFF3E0
+Cream: #FFF9F2
+Warm Surface: #FFFDFC
+Text: #4A2A12
+Muted: #8A6A55
+Border: #F3D7BF
+Success: #2E8B57
+Warning: #FFB300
+Danger: #D94A3A
