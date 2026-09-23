@@ -17,10 +17,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ImageCropPicker from 'react-native-image-crop-picker';
 import UmangSkylineFooter from '../components/UmangSkylineFooter';
 import CarLoader from '../components/CarLoader';
+import LoadingOverlay from '../components/LoadingOverlay';
+import { getErrorMessage } from '../utils/errorUtils';
+import ErrorModal from '../components/ErrorModal';
 import ImagePickerActionSheet from '../components/ImagePickerActionSheet';
 import { colors } from '../theme/colors';
 import { citizenService } from '../services/citizenService';
-import { DEFAULT_VEHICLE_IMAGE_BASE64 } from '../constants/defaultVehicleImage';
+import { DEFAULT_VEHICLE_IMAGE_BASE64, getVehicleImageSource } from '../constants/defaultVehicleImage';
 import CivicNavbar from '../components/CivicNavbar';
 
 interface AddVehicleScreenProps {
@@ -132,6 +135,7 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
       : ''
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const requestCameraPermission = async () => {
     try {
@@ -262,7 +266,8 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
       setShowSuccessModal(true);
     } catch (err: any) {
       setIsLoading(false);
-      Alert.alert('Error', err?.message || `Failed to ${vehicle ? 'update' : 'add'} vehicle. Please try again.`);
+      const message = getErrorMessage(err, `Failed to ${vehicle ? 'update' : 'add'} vehicle. Please try again.`);
+      setApiError(message);
     }
   };
 
@@ -296,20 +301,11 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
         {/* ================= 2. VEHICLE PHOTO AVATAR ================= */}
         <View style={s.avatarSection}>
           <Pressable onPress={handlePickPhoto} style={s.avatarContainer}>
-            {vehicleImage ? (
-              <Image
-                source={{ uri: `data:image/jpeg;base64,${vehicleImage}` }}
-                style={s.avatarImage}
-                resizeMode="cover"
-                onLoad={() => console.log('🖼️ [Display Image URI Length]:', `data:image/jpeg;base64,${vehicleImage}`.length)}
-              />
-            ) : (
-              <Image
-                source={require('../../assets/vehicle_hero_saffron.png')}
-                style={s.avatarImage}
-                resizeMode="cover"
-              />
-            )}
+            <Image
+              source={getVehicleImageSource(vehicleImage)}
+              style={s.avatarImage}
+              resizeMode="cover"
+            />
             <View style={s.cameraBadge}>
               <RealCameraIcon size={20} color="#FFFFFF" />
             </View>
@@ -734,6 +730,12 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
 
       {/* ================= CAR LOADER ================= */}
       <CarLoader visible={isLoading} message={vehicle ? "Updating vehicle..." : "Saving vehicle..."} />
+
+      <ErrorModal
+        visible={!!apiError}
+        message={apiError || ''}
+        onClose={() => setApiError(null)}
+      />
     </View>
   );
 }

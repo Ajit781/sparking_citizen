@@ -18,6 +18,9 @@ import { colors } from '../theme/colors';
 import { citizenService } from '../services/citizenService';
 import CivicNavbar from '../components/CivicNavbar';
 import CarLoader from '../components/CarLoader';
+import { getVehicleImageSource } from '../constants/defaultVehicleImage';
+import { getErrorMessage } from '../utils/errorUtils';
+import ErrorModal from '../components/ErrorModal';
 
 /* ================= CUSTOM ICONS ================= */
 const EditIcon = ({ size = 18, color = '#3B82F6' }: { size?: number, color?: string }) => {
@@ -110,6 +113,7 @@ export default function VehiclesScreen({ onBack, onAdd, onEdit }: VehiclesScreen
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [vehicleToDelete, setVehicleToDelete] = useState<any>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchVehicles();
@@ -143,7 +147,7 @@ export default function VehiclesScreen({ onBack, onAdd, onEdit }: VehiclesScreen
       await fetchVehicles();
     } catch (err: any) {
       setLoading(false);
-      Alert.alert('Error', err?.message || 'Failed to delete vehicle.');
+      setApiError(getErrorMessage(err, 'Failed to delete vehicle.'));
     }
   };
 
@@ -221,7 +225,7 @@ export default function VehiclesScreen({ onBack, onAdd, onEdit }: VehiclesScreen
                   }}
                   style={[s.iconBox, v.vehicle_image ? s.photoBox : null]}>
                   {v.vehicle_image ? (
-                    <Image source={{ uri: v.vehicle_image }} style={s.vehPhoto} />
+                    <Image source={getVehicleImageSource(v.vehicle_image)} style={s.vehPhoto} />
                   ) : (
                     <Image source={getVehicleIcon(v.vehicle_type_id)} style={s.vehIcon} resizeMode="contain" />
                   )}
@@ -288,7 +292,7 @@ export default function VehiclesScreen({ onBack, onAdd, onEdit }: VehiclesScreen
             <Text style={s.closeIcon}>✕</Text>
           </Pressable>
           {selectedImage && (
-            <Image source={{ uri: selectedImage }} style={s.fullScreenImage} resizeMode="contain" />
+            <Image source={getVehicleImageSource(selectedImage)} style={s.fullScreenImage} resizeMode="contain" />
           )}
         </View>
       </Modal>
@@ -318,6 +322,12 @@ export default function VehiclesScreen({ onBack, onAdd, onEdit }: VehiclesScreen
 
       {/* ================= CUSTOM CAR LOADER ================= */}
       <CarLoader visible={loading} message="Loading vehicles..." />
+
+      <ErrorModal
+        visible={!!apiError}
+        message={apiError || ''}
+        onClose={() => setApiError(null)}
+      />
     </View>
   );
 }

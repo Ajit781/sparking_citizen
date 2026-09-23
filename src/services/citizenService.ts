@@ -362,7 +362,6 @@ class CitizenService {
     };
 
     console.log(`🚗 [CitizenService] Updating vehicle for login_user_id: ${resolvedUserId}, vehicle_id: ${params.vehicle_id}`);
-    console.log(`🌐 [API URL] ${apiClient.defaults.baseURL || ''}${API_CONFIG.ENDPOINTS.UPDATE_CITIZEN_VEHICLE}`);
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.UPDATE_CITIZEN_VEHICLE, payload);

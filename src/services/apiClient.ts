@@ -105,19 +105,28 @@ export class ApiClient {
       try {
         data = JSON.parse(rawText);
       } catch {
-        data = { message: rawText };
+        if (rawText.trim().startsWith('<') || rawText.toLowerCase().includes('<html>')) {
+          data = { message: `Server error. Please try again later.` };
+        } else {
+          data = { message: rawText };
+        }
       }
 
       console.log(`📥 [ApiClient] Response from ${endpoint}:`, data?.status || response.status, data?.message || '');
 
       // Check for HTTP failure or Backend Application Failure (status !== 'GEN_000' and status !== 'success')
       if (!response.ok || (data?.status && data.status !== 'GEN_000' && data.status !== 'success')) {
-        const exactErrorMessage =
+        let exactErrorMessage =
           data?.message ||
           data?.error ||
           data?.data?.message ||
-          `Request failed with HTTP status ${response.status}`;
-        throw new Error(exactErrorMessage);
+          `Request failed. Please try again later.`;
+          
+        if (typeof exactErrorMessage === 'object') {
+          exactErrorMessage = exactErrorMessage.message || exactErrorMessage.details || `Server error. Please try again later.`;
+        }
+        
+        throw new Error(String(exactErrorMessage));
       }
 
       return data as T;

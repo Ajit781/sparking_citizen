@@ -16,16 +16,16 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.Marker;
-import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.maps.android.clustering.ClusterManager;
+import com.google.maps.android.clustering.Cluster;
 
 import java.util.Map;
-import java.util.HashMap;
 
 public class NativeMultiMapManager extends SimpleViewManager<MapView> {
     public static final String REACT_CLASS = "NativeMultiMap";
+    private ClusterManager<ParkingClusterItem> mClusterManager;
 
     @NonNull
     @Override
@@ -43,20 +43,45 @@ public class NativeMultiMapManager extends SimpleViewManager<MapView> {
         mapView.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(GoogleMap googleMap) {
-                googleMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+                // Initialize the manager with the context and the map.
+                mClusterManager = new ClusterManager<>(reactContext, googleMap);
+                
+                // Set the custom renderer
+                mClusterManager.setRenderer(new ParkingClusterRenderer(reactContext, googleMap, mClusterManager));
+
+                // Point the map's listeners at the listeners implemented by the cluster manager.
+                googleMap.setOnCameraIdleListener(mClusterManager);
+                googleMap.setOnMarkerClickListener(mClusterManager);
+                
+                // Add click listener for individual clustered items
+                mClusterManager.setOnClusterItemClickListener(new ClusterManager.OnClusterItemClickListener<ParkingClusterItem>() {
                     @Override
-                    public boolean onMarkerClick(Marker marker) {
-                        String id = (String) marker.getTag();
-                        if (id != null) {
-                            WritableMap event = Arguments.createMap();
-                            event.putString("id", id);
-                            ReactContext reactContext = (ReactContext) mapView.getContext();
-                            reactContext.getJSModule(RCTEventEmitter.class).receiveEvent(
-                                    mapView.getId(),
-                                    "onMarkerPress",
-                                    event);
-                        }
+                    public boolean onClusterItemClick(ParkingClusterItem item) {
+                        WritableMap event = Arguments.createMap();
+                        event.putString("id", item.getId());
+                        ReactContext reactContext = (ReactContext) mapView.getContext();
+                        reactContext.getJSModule(RCTEventEmitter.class).receiveEvent(
+                                mapView.getId(),
+                                "onMarkerPress",
+                                event);
                         return false;
+                    }
+                });
+                
+                // Add click listener for clusters to zoom in
+                mClusterManager.setOnClusterClickListener(new ClusterManager.OnClusterClickListener<ParkingClusterItem>() {
+                    @Override
+                    public boolean onClusterClick(Cluster<ParkingClusterItem> cluster) {
+                        LatLngBounds.Builder builder = LatLngBounds.builder();
+                        for (ParkingClusterItem item : cluster.getItems()) {
+                            builder.include(item.getPosition());
+                        }
+                        try {
+                            googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100));
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                        return true;
                     }
                 });
             }
@@ -79,7 +104,6 @@ public class NativeMultiMapManager extends SimpleViewManager<MapView> {
             double lat = region.getDouble("latitude");
             double lng = region.getDouble("longitude");
             
-            // Extract optional zoom from region, default to 13.5f for a wider view
             final float zoomLevel = region.hasKey("zoom") ? (float) region.getDouble("zoom") : 13.5f;
 
             view.getMapAsync(new OnMapReadyCallback() {
@@ -92,52 +116,21 @@ public class NativeMultiMapManager extends SimpleViewManager<MapView> {
         }
     }
 
-    private android.graphics.Bitmap createCustomMarker(android.content.Context context, boolean isSelected) {
-        int size = 50;
-        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
-        android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
-        
-        android.graphics.Paint paint = new android.graphics.Paint();
-        paint.setAntiAlias(true);
-        
-        // Theme color: Saffron / Orange (#F57C00) for normal, Blue for selected
-        paint.setColor(android.graphics.Color.parseColor(isSelected ? "#2196F3" : "#F57C00"));
-        
-        // Draw circular background
-        canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint);
-        
-        // Draw white border
-        paint.setColor(android.graphics.Color.WHITE);
-        paint.setStyle(android.graphics.Paint.Style.STROKE);
-        paint.setStrokeWidth(2.5f);
-        canvas.drawCircle(size / 2f, size / 2f, (size / 2f) - 1.5f, paint);
-        
-        // Draw 'P'
-        paint.setStyle(android.graphics.Paint.Style.FILL);
-        paint.setTextSize(26f);
-        paint.setFakeBoldText(true);
-        paint.setTextAlign(android.graphics.Paint.Align.CENTER);
-        
-        // Vertically center text
-        android.graphics.Rect textBounds = new android.graphics.Rect();
-        paint.getTextBounds("P", 0, 1, textBounds);
-        float yPos = (size / 2f) - textBounds.exactCenterY();
-        
-        canvas.drawText("P", size / 2f, yPos, paint);
-        
-        return bitmap;
-    }
-
     @ReactProp(name = "markers")
     public void setMarkers(MapView view, ReadableArray markers) {
         view.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(GoogleMap googleMap) {
-                googleMap.clear();
+                if (mClusterManager == null) return;
+                
+                mClusterManager.clearItems();
 
-                if (markers == null) return;
+                if (markers == null) {
+                    mClusterManager.cluster();
+                    return;
+                }
 
-                com.google.android.gms.maps.model.LatLngBounds.Builder builder = new com.google.android.gms.maps.model.LatLngBounds.Builder();
+                LatLngBounds.Builder builder = new LatLngBounds.Builder();
                 boolean hasMarkers = false;
 
                 for (int i = 0; i < markers.size(); i++) {
@@ -150,19 +143,14 @@ public class NativeMultiMapManager extends SimpleViewManager<MapView> {
 
                     boolean isSelected = "blue".equals(color);
                     
-                    android.graphics.Bitmap customIcon = createCustomMarker(view.getContext(), isSelected);
-
-                    LatLng pos = new LatLng(lat, lng);
-                    Marker marker = googleMap.addMarker(new MarkerOptions()
-                            .position(pos)
-                            .title(title)
-                            .icon(BitmapDescriptorFactory.fromBitmap(customIcon))
-                            .zIndex(isSelected ? 100 : 0));
+                    ParkingClusterItem offsetItem = new ParkingClusterItem(lat, lng, title, id, isSelected);
+                    mClusterManager.addItem(offsetItem);
                     
-                    marker.setTag(id);
-                    builder.include(pos);
+                    builder.include(new LatLng(lat, lng));
                     hasMarkers = true;
                 }
+
+                mClusterManager.cluster();
 
                 if (hasMarkers) {
                     try {
@@ -171,7 +159,7 @@ public class NativeMultiMapManager extends SimpleViewManager<MapView> {
                             googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100));
                         }
                     } catch (Exception e) {
-                        // In case layout hasn't happened yet, catch the exception
+                        // Ignore
                     }
                 }
             }

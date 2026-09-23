@@ -14,8 +14,9 @@ import {
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { authService, GenerateOtpResult } from '../services/authService';
+import { getErrorMessage } from '../utils/errorUtils';
+import ErrorModal from '../components/ErrorModal';
 import UmangSkylineFooter from '../components/UmangSkylineFooter';
-
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_HEIGHT = 295;
 const HERO_IMAGE_WIDTH = Math.max(SCREEN_WIDTH, (HERO_HEIGHT * 16) / 10);
@@ -31,7 +32,7 @@ export default function LoginScreen({
   const [agreed, setAgreed] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
+  const [apiError, setApiError] = useState<string | null>(null);
   // Theme-aware assets
   const badgeSource = require('../../assets/SmartParkingLogo.png');
 
@@ -69,14 +70,14 @@ export default function LoginScreen({
       onNext(trimmed, result);
     } catch (error: any) {
       setIsLoading(false);
-      const message =
-        error?.message || 'Something went wrong while generating OTP. Please try again.';
-      setErrorMessage(message);
+      const message = getErrorMessage(error, 'Something went wrong while generating OTP. Please try again.');
+      setApiError(message);
     }
   };
 
   return (
-    <KeyboardAvoidingView
+    <>
+      <KeyboardAvoidingView
       style={s.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
@@ -194,6 +195,13 @@ export default function LoginScreen({
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+
+      <ErrorModal
+        visible={!!apiError}
+        message={apiError || ''}
+        onClose={() => setApiError(null)}
+      />
+    </>
   );
 }
 

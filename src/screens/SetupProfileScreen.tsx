@@ -28,6 +28,8 @@ import {
 } from '../constants/defaultAvatar';
 import CarLoader from '../components/CarLoader';
 import ImagePickerActionSheet from '../components/ImagePickerActionSheet';
+import { getErrorMessage } from '../utils/errorUtils';
+import ErrorModal from '../components/ErrorModal';
 
 interface SetupProfileScreenProps {
   onBack?: () => void;
@@ -51,6 +53,7 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
   const [profilePic, setProfilePic] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Success Modal State
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -198,7 +201,7 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
       }
     } catch (e: any) {
       if (e.message !== 'User cancelled image selection') {
-        Alert.alert('Gallery Error', e.message || 'Failed to select image.');
+        Alert.alert('Gallery Error', getErrorMessage(e, 'Failed to select image.'));
       }
     }
   };
@@ -268,8 +271,8 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
       setShowSuccessModal(true);
     } catch (error: any) {
       setIsLoading(false);
-      const errMsg = error?.message || 'Failed to save profile. Please try again.';
-      Alert.alert('Registration Notice', errMsg);
+      const errMsg = getErrorMessage(error, 'Failed to save profile. Please try again.');
+      setApiError(errMsg);
     }
   };
 
@@ -580,6 +583,12 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
       />
 
       <CarLoader visible={isLoading || isFetching} message={isFetching ? "Loading your profile..." : "Saving citizen profile..."} />
+
+      <ErrorModal
+        visible={!!apiError}
+        message={apiError || ''}
+        onClose={() => setApiError(null)}
+      />
     </View>
   );
 }

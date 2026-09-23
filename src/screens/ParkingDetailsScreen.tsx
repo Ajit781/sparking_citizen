@@ -236,14 +236,13 @@ export default function ParkingDetailsScreen({ onBack, onReserveSlot }: ParkingD
             </View>
           </View>
 
-          {/* ================= 4. CAPACITY STATUS (2W & 4W) (Removed by User) ================= */}
 
           {/* ================= 4.5. LIVE SENSOR (PHYSICAL SLOTS) ================= */}
           {lot?.physical_slots && (
             <View style={s.sensorDataCard}>
               <View style={s.sensorDataHeader}>
                 <Image source={require('../../assets/icons/icon_shield_check.png')} style={{ width: 16, height: 16, tintColor: '#0ea5e9' }} resizeMode="contain" />
-                <Text style={s.sensorDataTitle}>Live Physical Slots</Text>
+                <Text style={s.sensorDataTitle}>Live Slots</Text>
               </View>
 
               {lot.physical_slots.two_wheeler && (

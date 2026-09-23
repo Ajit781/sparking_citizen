@@ -24,6 +24,8 @@ import ImagePickerActionSheet from '../components/ImagePickerActionSheet';
 import { colors } from '../theme/colors';
 import { citizenService, GrievanceType, GrievanceSeverity } from '../services/citizenService';
 import CivicNavbar from '../components/CivicNavbar';
+import { getErrorMessage } from '../utils/errorUtils';
+import ErrorModal from '../components/ErrorModal';
 
 interface PostGrievanceScreenProps {
   onBack: () => void;
@@ -58,6 +60,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
   const [successTicket, setSuccessTicket] = useState('');
   const [isLocating, setIsLocating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // API State
   const [apiGrievanceTypes, setApiGrievanceTypes] = useState<GrievanceType[]>([]);
@@ -236,7 +239,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
       setShowSuccessModal(true);
     } catch (error: any) {
       setIsSubmitting(false);
-      Alert.alert('Submission Notice', error.message || 'Could not post grievance. Please try again.');
+      setApiError(getErrorMessage(error, 'Could not post grievance. Please try again.'));
     }
   };
 
@@ -648,6 +651,12 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
       )}
 
       <CarLoader visible={isSubmitting} message="Submitting Grievance..." />
+
+      <ErrorModal
+        visible={!!apiError}
+        message={apiError || ''}
+        onClose={() => setApiError(null)}
+      />
     </View>
   );
 }

@@ -14,6 +14,9 @@ import {
   View,
 } from 'react-native';
 import {colors} from '../theme/colors';
+import {getErrorMessage} from '../utils/errorUtils';
+import UmangSkylineFooter from '../components/UmangSkylineFooter';
+import ErrorModal from '../components/ErrorModal';
 import {authService} from '../services/authService';
 import {UserSession} from '../services/storageService';
 
@@ -38,6 +41,7 @@ export default function OtpScreen({
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
 
@@ -73,8 +77,8 @@ export default function OtpScreen({
       onNext(session);
     } catch (error: any) {
       setIsLoading(false);
-      const message = error?.message || 'OTP verification failed. Please check and try again.';
-      setErrorMessage(message);
+      const message = getErrorMessage(error, 'OTP verification failed. Please check and try again.');
+      setApiError(message);
     }
   };
 
@@ -93,16 +97,17 @@ export default function OtpScreen({
       setSuccessMessage('A new OTP has been sent successfully.');
     } catch (error: any) {
       setIsResending(false);
-      const message = error?.message || 'Failed to resend OTP. Please try again.';
-      setErrorMessage(message);
+      const message = getErrorMessage(error, 'Failed to resend OTP. Please try again.');
+      setApiError(message);
     }
   };
 
   const formattedTime = `00:${countdown < 10 ? `0${countdown}` : countdown}`;
 
   return (
-    <KeyboardAvoidingView
-      style={s.container}
+    <>
+      <KeyboardAvoidingView
+        style={s.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         style={s.scrollView}
@@ -272,6 +277,13 @@ export default function OtpScreen({
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+
+      <ErrorModal
+        visible={!!apiError}
+        message={apiError || ''}
+        onClose={() => setApiError(null)}
+      />
+    </>
   );
 }
 
