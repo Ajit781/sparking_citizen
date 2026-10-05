@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   View,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
@@ -108,7 +109,7 @@ export default function ProfileScreen({
   const handleRateUs = () => {
     Alert.alert(
       'Rate S-Parking',
-      'Love the smart parking experience? Support Kolkata smart civic services by giving us 5 stars!',
+      'Love the smart parking experience? Support smart parking services by giving us 5 stars!',
       [
         { text: 'Later', style: 'cancel' },
         {
@@ -158,7 +159,7 @@ export default function ProfileScreen({
         {/* ================= 1. BRAND HERO HEADER ================= */}
         <View style={[s.headerContainer, { paddingTop: Math.max(insets.top + 6, 42) }]}>
           <Image
-            source={require('../../assets/kolkata_skyline_saffron_hd.jpg')}
+            source={require('../../assets/SmartParkingLogo.png')}
             style={s.headerBackdrop}
             resizeMode="cover"
           />
@@ -177,28 +178,11 @@ export default function ProfileScreen({
               <View style={s.brandTextGroup}>
                 <View style={s.brandTitleRow}>
                   <Text style={s.brandTitle}>S-Parking</Text>
-                  <View style={s.kmcBadge}>
-                    <Text style={s.kmcBadgeText}>KMC OFFICIAL</Text>
-                  </View>
                 </View>
-                <Text style={s.brandSubtitle}>Civic Smart Mobility Grid • Kolkata</Text>
+
               </View>
             </View>
 
-            {/* Notification Bell */}
-            <Pressable
-              onPress={() => setShowNotificationsModal(true)}
-              style={({ pressed }) => [s.bellWrapper, pressed && s.bellWrapperPressed]}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Image
-                source={require('../../assets/icons/icon_bell.png')}
-                style={s.bellIcon}
-                resizeMode="contain"
-              />
-              <View style={s.badge}>
-                <Text style={s.badgeText}>3</Text>
-              </View>
-            </Pressable>
           </View>
 
           {/* ================= 2. 🔥 NEW LUXURY CITIZEN MOBILITY CARD ================= */}
@@ -206,14 +190,7 @@ export default function ProfileScreen({
 
             {/* Ribbon Header: KMC Tag + Edit Button */}
             <View style={s.cardTopRibbon}>
-              <View style={s.civicPassTag}>
-                <Image
-                  source={require('../../assets/icons/icon_shield_check.png')}
-                  style={s.shieldPassIcon}
-                  resizeMode="contain"
-                />
-                <Text style={s.civicPassText}>VERIFIED CITIZEN PASS</Text>
-              </View>
+              <View />
 
               <Pressable
                 onPress={() => {
@@ -242,7 +219,7 @@ export default function ProfileScreen({
               <View style={s.avatarWrapper}>
                 <View style={s.avatarOuterRing}>
                   <Image
-                    source={getCitizenAvatarSource(citizenProfile?.profile_pic)}
+                    source={getCitizenAvatarSource(citizenProfile?.profile_pic, citizenProfile?.modified_on)}
                     style={[
                       s.avatarImg,
                       (!citizenProfile?.profile_pic || citizenProfile.profile_pic.trim() === '' || citizenProfile.profile_pic === DEFAULT_CITIZEN_AVATAR_BASE64) && { tintColor: colors.primary }
@@ -287,45 +264,13 @@ export default function ProfileScreen({
                     resizeMode="contain"
                   />
                   <Text style={s.metaAddressText} numberOfLines={1}>
-                    {userAddress || 'Kolkata, West Bengal'}
+                    {userAddress || 'Select Your Location'}
                   </Text>
                 </View>
               </View>
             </View>
 
-            {/* Frosted Glass 3-Pod Stats Bar */}
-            <View style={s.statsGlanceBar}>
-
-              {/* Pod 1: FASTag Wallet */}
-              <View style={s.statPod}>
-                <Text style={s.statPodLabel}>FASTag Wallet</Text>
-                <Text style={s.statPodValue}>₹{citizenProfile?.wallet_amount || '450.00'}</Text>
-                <View style={s.activeIndicatorRow}>
-                  <View style={s.greenActiveDot} />
-                  <Text style={s.activeStatusText}>Active</Text>
-                </View>
-              </View>
-
-              <View style={s.podDivider} />
-
-              {/* Pod 2: My Vehicles */}
-              <Pressable onPress={onVehicles} style={s.statPod}>
-                <Text style={s.statPodLabel}>My Vehicles</Text>
-                <Text style={s.statPodValue}>
-                  {citizenProfile?.vehicle_count || vehiclesCountFallback(userSession)}
-                </Text>
-                <Text style={s.statSubLink}>Manage →</Text>
-              </Pressable>
-
-              <View style={s.podDivider} />
-
-              {/* Pod 3: Rewards / Bonus */}
-              <View style={s.statPod}>
-                <Text style={s.statPodLabel}>Bonus Points</Text>
-                <Text style={s.statPodValue}>₹{citizenProfile?.referral_bonus || '50'}</Text>
-                <Text style={s.rewardsSubText}>Cashback</Text>
-              </View>
-            </View>
+            {/* Stats Bar Hidden */}
           </View>
         </View>
 
@@ -351,7 +296,7 @@ export default function ProfileScreen({
                 </View>
                 <View style={s.actionTextWrap}>
                   <Text style={s.actionTitle}>My Vehicles</Text>
-                  <Text style={s.actionSubtitle}>FASTag & RC status</Text>
+                  <Text style={s.actionSubtitle}>RC status</Text>
                 </View>
                 <Image
                   source={require('../../assets/icons/icon_chevron.png')}
@@ -420,7 +365,7 @@ export default function ProfileScreen({
                 </View>
                 <View style={s.actionTextWrap}>
                   <Text style={s.actionTitle}>Alerts</Text>
-                  <Text style={s.actionSubtitle}>Civic announcements</Text>
+                  <Text style={s.actionSubtitle}>Announcements</Text>
                 </View>
                 <Image
                   source={require('../../assets/icons/icon_chevron.png')}
@@ -432,20 +377,15 @@ export default function ProfileScreen({
           </View>
 
           {/* ================= 4. SETTINGS & POLICIES ================= */}
-          <Text style={[s.sectionHeading, { marginTop: 22 }]}>Account & Governance</Text>
+          <Text style={[s.sectionHeading, { marginTop: 22 }]}>Account Settings</Text>
 
           <View style={s.settingsGroupCard}>
             {/* 1. Privacy Policy */}
             <Pressable
-              onPress={() =>
-                setShowInfoModal({
-                  visible: true,
-                  title: 'Privacy Policy',
-                  content:
-                    'Your privacy is our priority. S-Parking collects only necessary account details and vehicle registration numbers strictly to facilitate parking reservations and municipal compliance. We never share or sell your personal information.',
-                })
-              }
-              style={s.settingsRow}>
+              onPress={() => {
+                Linking.openURL('http://www.s-parking.com/privacypolicy.html').catch(err => console.error("Couldn't load page", err));
+              }}
+              style={({ pressed }) => [s.settingsRow, pressed && { opacity: 0.5 }]}>
               <View style={s.settingsIconWrap}>
                 <Image
                   source={require('../../assets/icons/icon_shield_check.png')}
@@ -465,15 +405,10 @@ export default function ProfileScreen({
 
             {/* 2. Terms & Conditions */}
             <Pressable
-              onPress={() =>
-                setShowInfoModal({
-                  visible: true,
-                  title: 'Terms & Conditions',
-                  content:
-                    'By utilizing S-Parking citizen services, you agree to adhere to municipal parking rules, tariffs, and designated parking slots. Overstaying booked slots may incur standard municipal tariffs.',
-                })
-              }
-              style={s.settingsRow}>
+              onPress={() => {
+                Linking.openURL('http://www.s-parking.com/termscondition.html').catch(err => console.error("Couldn't load page", err));
+              }}
+              style={({ pressed }) => [s.settingsRow, pressed && { opacity: 0.5 }]}>
               <View style={s.settingsIconWrap}>
                 <Image
                   source={require('../../assets/icons/icon_file_text.png')}
@@ -498,10 +433,10 @@ export default function ProfileScreen({
                   visible: true,
                   title: 'Help & Support',
                   content:
-                    'Need assistance with your parking slot, payments, or vehicle registrations? Contact our 24x7 municipal citizen helpline at 1800-345-0000 or email support@s-parking.gov.in.',
+                    'Need assistance with your parking slot, payments, or vehicle registrations? Contact our  citizen helpline at 9073936479 or email support@vyomainnovusglobal.com',
                 })
               }
-              style={s.settingsRow}>
+              style={({ pressed }) => [s.settingsRow, pressed && { opacity: 0.5 }]}>
               <View style={s.settingsIconWrap}>
                 <Image
                   source={require('../../assets/icons/icon_help.png')}
@@ -509,7 +444,7 @@ export default function ProfileScreen({
                   resizeMode="contain"
                 />
               </View>
-              <Text style={s.settingsLabel}>24x7 Citizen Support</Text>
+              <Text style={s.settingsLabel}>Citizen Support</Text>
               <Image
                 source={require('../../assets/icons/icon_chevron.png')}
                 style={s.settingsChevron}
@@ -526,10 +461,10 @@ export default function ProfileScreen({
                   visible: true,
                   title: 'About S-Parking',
                   content:
-                    `S-Parking Citizen Mobile Application v${pkg.version}\nDeveloped for Kolkata Smart City and Municipal Corporation.\n\nPark Smart. Move Better.`,
+                    `S-Parking Citizen Mobile Application v${pkg.version}\n\nPark Smart. Move Better.`,
                 })
               }
-              style={s.settingsRow}>
+              style={({ pressed }) => [s.settingsRow, pressed && { opacity: 0.5 }]}>
               <View style={s.settingsIconWrap}>
                 <Image
                   source={require('../../assets/icons/icon_info.png')}
@@ -537,7 +472,7 @@ export default function ProfileScreen({
                   resizeMode="contain"
                 />
               </View>
-              <Text style={s.settingsLabel}>About Civic Grid v{pkg.version}</Text>
+              <Text style={s.settingsLabel}>About v{pkg.version}</Text>
               <Image
                 source={require('../../assets/icons/icon_chevron.png')}
                 style={s.settingsChevron}
@@ -548,7 +483,7 @@ export default function ProfileScreen({
             <View style={s.divider} />
 
             {/* 5. Logout */}
-            <Pressable onPress={handleLogout} style={s.settingsRow}>
+            <Pressable onPress={handleLogout} style={({ pressed }) => [s.settingsRow, pressed && { opacity: 0.5 }]}>
               <View style={[s.settingsIconWrap, { backgroundColor: '#FEF2F2' }]}>
                 <Image
                   source={require('../../assets/icons/icon_logout.png')}
@@ -591,7 +526,7 @@ export default function ProfileScreen({
               style={s.feedbackInput}
               multiline
               numberOfLines={4}
-              placeholder="What did you like or how can we improve civic slots?"
+              placeholder="What did you like or how can we improve?"
               placeholderTextColor="#94A3B8"
               value={feedbackComment}
               onChangeText={setFeedbackComment}
@@ -622,7 +557,7 @@ export default function ProfileScreen({
         <View style={s.modalBackdrop}>
           <View style={[s.modalCard, { maxHeight: '75%' }]}>
             <View style={s.notifHeaderRow}>
-              <Text style={s.modalTitle}>Civic Notifications</Text>
+              <Text style={s.modalTitle}>Notifications</Text>
               <Pressable
                 onPress={() => setShowNotificationsModal(false)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>

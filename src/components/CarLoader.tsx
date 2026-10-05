@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet, Easing, Modal, Text } from 'react-native';
+import { View, Animated, StyleSheet, Easing, Modal, Text, Image } from 'react-native';
 import { colors } from '../theme/colors';
 
 interface CarLoaderProps {
@@ -47,17 +47,19 @@ export default function CarLoader({ visible, message = 'Loading...' }: CarLoader
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+    <View style={[StyleSheet.absoluteFill, { zIndex: 99999, elevation: 999 }]}>
       <View style={s.overlay}>
         <View style={s.loaderCard}>
           
           {/* Animation Container */}
           <View style={s.animationBox}>
-            <Animated.Image 
-              source={require('../../assets/icons/icon_car.png')} 
-              style={[s.carIcon, { transform: [{ translateY: bounceAnim }] }]} 
-              resizeMode="contain" 
-            />
+            <Animated.View style={[s.carIconContainer, { transform: [{ translateY: bounceAnim }] }]}>
+              <Image 
+                source={require('../../assets/icons/icon_car.png')} 
+                style={s.carIcon} 
+                resizeMode="contain" 
+              />
+            </Animated.View>
             
             {/* Moving Road */}
             <View style={s.roadWrapper}>
@@ -73,13 +75,17 @@ export default function CarLoader({ visible, message = 'Loading...' }: CarLoader
           <Text style={s.loadingText}>{message}</Text>
         </View>
       </View>
-    </Modal>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
   overlay: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
     backgroundColor: 'rgba(15, 23, 42, 0.65)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -104,12 +110,14 @@ const s = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 16,
   },
+  carIconContainer: {
+    zIndex: 2,
+    marginBottom: 4,
+  },
   carIcon: {
     width: 48,
     height: 48,
     tintColor: colors.primary,
-    zIndex: 2,
-    marginBottom: 4,
   },
   roadWrapper: {
     position: 'absolute',

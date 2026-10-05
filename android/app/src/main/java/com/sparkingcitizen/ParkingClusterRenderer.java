@@ -21,6 +21,9 @@ import com.google.maps.android.clustering.view.DefaultClusterRenderer;
 public class ParkingClusterRenderer extends DefaultClusterRenderer<ParkingClusterItem> {
     private final Context context;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private Bitmap cachedNormalIcon;
+    private Bitmap cachedSelectedIcon;
+    private Bitmap cachedTapIcon;
 
     public ParkingClusterRenderer(Context context, GoogleMap map, ClusterManager<ParkingClusterItem> clusterManager) {
         super(context, map, clusterManager);
@@ -29,9 +32,19 @@ public class ParkingClusterRenderer extends DefaultClusterRenderer<ParkingCluste
 
     @Override
     protected void onBeforeClusterItemRendered(ParkingClusterItem item, MarkerOptions markerOptions) {
-        Bitmap customIcon = createCustomMarker(item.isSelected());
+        Bitmap customIcon;
+        if (item.isTap()) {
+            if (cachedTapIcon == null) cachedTapIcon = createTapMarker();
+            customIcon = cachedTapIcon;
+        } else if (item.isSelected()) {
+            if (cachedSelectedIcon == null) cachedSelectedIcon = createCustomMarker(true);
+            customIcon = cachedSelectedIcon;
+        } else {
+            if (cachedNormalIcon == null) cachedNormalIcon = createCustomMarker(false);
+            customIcon = cachedNormalIcon;
+        }
         markerOptions.icon(BitmapDescriptorFactory.fromBitmap(customIcon));
-        markerOptions.zIndex(item.isSelected() ? 100 : 0);
+        markerOptions.zIndex(item.isTap() ? 200 : item.isSelected() ? 100 : 0);
         markerOptions.title(item.getTitle());
     }
 
@@ -54,33 +67,55 @@ public class ParkingClusterRenderer extends DefaultClusterRenderer<ParkingCluste
     }
 
     private void animateMarker(final Marker marker) {
-        final long duration = 1200;
-        
-        final ValueAnimator animator = ValueAnimator.ofFloat(0, 1);
-        animator.setDuration(duration);
-        animator.setRepeatCount(ValueAnimator.INFINITE);
-        animator.setRepeatMode(ValueAnimator.REVERSE);
-        
-        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
-                try {
-                    float v = animation.getAnimatedFraction();
-                    // Subtle bouncing effect by modulating the anchor point
-                    marker.setAnchor(0.5f, 0.5f + (v * 0.15f)); 
-                } catch (Exception e) {
-                    animator.cancel();
-                }
-            }
-        });
-        
-        // Stagger animations slightly
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                animator.start();
-            }
-        }, (long) (Math.random() * 500));
+        // Disabled animation to prevent OutOfMemoryError and high CPU usage when rendering many markers on Android 11
+    }
+
+    public Bitmap createTapMarkerBitmap() {
+        return createTapMarker();
+    }
+
+    private Bitmap createTapMarker() {
+        int w = 60;
+        int h = 80; // Taller for pin shape
+        Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+
+        Paint paint = new Paint();
+        paint.setAntiAlias(true);
+
+        // Draw pin drop circle (top part)
+        float cx = w / 2f;
+        float cy = w / 2f; // circle center at top
+        float radius = w / 2f - 3f;
+
+        // Outer circle fill - deep blue/indigo
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.parseColor("#1A56DB"));
+        canvas.drawCircle(cx, cy, radius, paint);
+
+        // White border
+        paint.setColor(Color.WHITE);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(3.5f);
+        canvas.drawCircle(cx, cy, radius - 1f, paint);
+
+        // Inner white dot (like a location pin)
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.WHITE);
+        canvas.drawCircle(cx, cy, radius * 0.35f, paint);
+
+        // Draw pin tail (triangle pointing down)
+        paint.setColor(Color.parseColor("#1A56DB"));
+        paint.setStyle(Paint.Style.FILL);
+        android.graphics.Path path = new android.graphics.Path();
+        float tailTop = cy + radius - 2f;
+        path.moveTo(cx - 10f, tailTop);
+        path.lineTo(cx + 10f, tailTop);
+        path.lineTo(cx, h - 2f);
+        path.close();
+        canvas.drawPath(path, paint);
+
+        return bitmap;
     }
 
     private Bitmap createCustomMarker(boolean isSelected) {

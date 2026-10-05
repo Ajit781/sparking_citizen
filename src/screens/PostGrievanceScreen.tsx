@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Alert,
   Image,
@@ -26,6 +26,7 @@ import { citizenService, GrievanceType, GrievanceSeverity } from '../services/ci
 import CivicNavbar from '../components/CivicNavbar';
 import { getErrorMessage } from '../utils/errorUtils';
 import ErrorModal from '../components/ErrorModal';
+import VisionCamera from '../components/VisionCamera';
 
 interface PostGrievanceScreenProps {
   onBack: () => void;
@@ -57,6 +58,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
   const [locationCoords, setLocationCoords] = useState<{ lat: number; lng: number }>({ lat: 22.5726, lng: 88.3639 });
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [showVisionCamera, setShowVisionCamera] = useState(false);
   const [successTicket, setSuccessTicket] = useState('');
   const [isLocating, setIsLocating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,6 +71,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
 
   // Modals
   const [modalType, setModalType] = useState<'none' | 'type' | 'area'>('none');
+  const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
     loadMasterData();
@@ -112,39 +115,8 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
   };
 
   const handleTakePhoto = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          Alert.alert('Permission Denied', 'Camera permission is required to capture evidence.');
-          return;
-        }
-      } catch (err) {
-        console.warn(err);
-      }
-    }
     setShowImagePicker(false);
-    
-    setTimeout(async () => {
-      try {
-        const image = await ImageCropPicker.openCamera({
-          mediaType: 'photo',
-          includeBase64: true,
-          compressImageQuality: 0.3,
-          compressImageMaxWidth: 400,
-          compressImageMaxHeight: 400,
-        });
-
-        if (image.path) {
-          setPhotos(p => [...p, { uri: image.path, base64: image.data }].slice(0, 5));
-        }
-      } catch (e: any) {
-        if (e.code !== 'E_PICKER_CANCELLED' && e.message !== 'User cancelled image selection') {
-          console.error('Camera capture error: ', e);
-          Alert.alert('Error', 'Failed to capture photo from camera.');
-        }
-      }
-    }, 500);
+    setShowVisionCamera(true);
   };
 
   const handleAddPhoto = () => {
@@ -178,12 +150,20 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
       setIsLocating(true);
       Geolocation.getCurrentPosition(
         position => {
+          const newLat = position.coords.latitude;
+          const newLng = position.coords.longitude;
           setLocationCoords({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
+            lat: newLat,
+            lng: newLng,
           });
+          mapRef.current?.animateToRegion({
+            latitude: newLat,
+            longitude: newLng,
+            latitudeDelta: 0.006,
+            longitudeDelta: 0.006,
+          }, 800);
           setIsLocating(false);
-          setAddressText(`${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`);
+          setAddressText(`${newLat.toFixed(5)}, ${newLng.toFixed(5)}`);
         },
         error => {
           console.warn('Geolocation error:', error.message);
@@ -203,7 +183,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
       return;
     }
     if (!parkingArea) {
-      Alert.alert('Parking Area Required', 'Please select the affected parking bay/area.');
+      Alert.alert('Parking Area Required', 'Please select the affected parking /area.');
       return;
     }
     if (!severity) {
@@ -233,7 +213,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
 
       const result = await citizenService.postCitizenGrievance(payload);
 
-      const ticketNo = result?.data?.ticket_no || result?.ticket_no || `KMC-GRV-${Math.floor(10000 + Math.random() * 90000)}`;
+      const ticketNo = result?.data?.ticket_no || result?.ticket_no || `GRV-${Math.floor(10000 + Math.random() * 90000)}`;
       setSuccessTicket(ticketNo);
       setIsSubmitting(false);
       setShowSuccessModal(true);
@@ -250,8 +230,6 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
       {/* ================= 1. REUSABLE CIVIC NAVBAR ================= */}
       <CivicNavbar
         title="Post Grievance"
-        subtitle="Official Citizen Redressal Portal"
-        badge="KMC SUPPORT"
         onBack={onBack}
       />
 
@@ -300,7 +278,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
 
           {/* Field 2: Parking Area (Text Input) */}
           <View style={s.fieldGroup}>
-            <Text style={s.fieldLabel}>PARKING BAY / AREA <Text style={s.requiredStar}>*</Text></Text>
+            <Text style={s.fieldLabel}>PARKING / AREA <Text style={s.requiredStar}>*</Text></Text>
             <View style={s.inputCard}>
               <View style={[s.inputIconBox, { backgroundColor: '#EFF6FF' }]}>
                 <Image
@@ -426,6 +404,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
 
             <View style={s.miniMapCard}>
               <MapView
+                ref={mapRef}
                 style={s.miniMapImage}
                 region={{
                   latitude: locationCoords.lat,
@@ -494,7 +473,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
               isSubmitting && { opacity: 0.7 }
             ]}>
             {isSubmitting ? (
-              <Text style={s.submitBtnText}>Submitting to KMC...</Text>
+              <Text style={s.submitBtnText}>Submitting...</Text>
             ) : (
               <View style={s.submitBtnContent}>
                 <Text style={s.submitBtnText}>Submit Grievance</Text>
@@ -515,7 +494,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
               resizeMode="contain"
             />
             <Text style={s.trustText}>
-              Directly routed to KMC Municipal Enforcement & Vigilance Wing
+              Directly routed to Municipal Enforcement & Vigilance Wing
             </Text>
           </View>
         </View>
@@ -536,10 +515,10 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
             <View style={s.popupHeaderRow}>
               <View>
                 <View style={s.popupThemeTag}>
-                  <Text style={s.popupThemeTagText}>KMC SELECTION</Text>
+                  <Text style={s.popupThemeTagText}>SELECTION</Text>
                 </View>
                 <Text style={s.popupTitle}>
-                  {modalType === 'type' ? 'Select Grievance Category' : 'Select Parking Bay'}
+                  {modalType === 'type' ? 'Select Grievance Category' : 'Select Parking'}
                 </Text>
               </View>
 
@@ -613,9 +592,9 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
             <View style={s.successCircle}>
               <Text style={s.successCheckMark}>✓</Text>
             </View>
-            <Text style={s.successMainTitle}>Grievance Lodged!</Text>
+            <Text style={s.successMainTitle}>Grievance Added!</Text>
             <Text style={s.successSubText}>
-              Your grievance has been successfully forwarded to Kolkata Municipal Redressal Cell.
+              Your grievance has been successfully forwarded to the Grievance Redressal Cell.
             </Text>
 
             <View style={s.ticketBox}>
@@ -623,9 +602,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
               <Text style={s.ticketValue}>{successTicket}</Text>
             </View>
 
-            <View style={s.slaNoticeBadge}>
-              <Text style={s.slaText}>⚡ Priority resolution SLA: 4 Hours</Text>
-            </View>
+
 
             <Pressable
               style={s.trackBtn}
@@ -656,6 +633,16 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
         visible={!!apiError}
         message={apiError || ''}
         onClose={() => setApiError(null)}
+      />
+
+      {/* ================= 6. VISION CAMERA MODAL ================= */}
+      <VisionCamera
+        visible={showVisionCamera}
+        onClose={() => setShowVisionCamera(false)}
+        onCapture={(base64) => {
+          setPhotos(p => [...p, { uri: `data:image/jpeg;base64,${base64}`, base64 }].slice(0, 5));
+          setShowVisionCamera(false);
+        }}
       />
     </View>
   );
@@ -890,7 +877,7 @@ const s = StyleSheet.create({
 
   /* Mini Map */
   miniMapCard: {
-    height: 100,
+    height: 150,
     borderRadius: 14,
     overflow: 'hidden',
     position: 'relative',

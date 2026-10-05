@@ -8,10 +8,14 @@ import {
   StyleSheet,
   Text,
   View,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { authService } from '../services/authService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_CONFIG } from '../config/api.config';
+import DeviceInfo from 'react-native-device-info';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -32,6 +36,50 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
     authService.initToken().catch(err => {
       console.warn('[SplashScreen] Token pre-warm notice:', err?.message || err);
     });
+
+    // 1.5 Check dynamic App Version and Base URL
+    const checkAppVersion = async () => {
+      try {
+        // Load cached url first (in case offline or slow network)
+        const cachedUrl = await AsyncStorage.getItem('@dynamic_base_url');
+        if (cachedUrl) {
+          console.log('🌐 [SplashScreen] Loaded cached Base URL:', cachedUrl);
+          API_CONFIG.BASE_URL = cachedUrl;
+        }
+
+        const packageName = DeviceInfo.getBundleId();
+        const appVersion = DeviceInfo.getVersion();
+        console.log(`📡 [SplashScreen] Calling CheckAppVersion API for Package: ${packageName}, Version: ${appVersion}`);
+        
+        const formData = new URLSearchParams();
+        formData.append('Package', packageName);
+        formData.append('Version', appVersion);
+
+        const response = await fetch('https://www.s-parking.com/sParkingAppVersion/CheckAppVersion.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: formData.toString()
+        });
+
+        const data = await response.json();
+        console.log('📥 [SplashScreen] AppVersion Response:', data);
+
+        if (data && data.base_url) {
+          console.log('✅ [SplashScreen] Updating dynamic base_url to:', data.base_url);
+          API_CONFIG.BASE_URL = data.base_url;
+          await AsyncStorage.setItem('@dynamic_base_url', data.base_url);
+        } else if (data && data.status === 0) {
+           Alert.alert("Notice", data.message || "Unable to fetch server details.");
+        }
+      } catch (error) {
+        console.error('❌ [SplashScreen] AppVersion Check Failed:', error);
+        if (!API_CONFIG.BASE_URL) {
+          Alert.alert("Connection Error", "Failed to connect to the server. Please check your internet connection and try again.");
+        }
+      }
+    };
+
+    checkAppVersion();
 
     // 2. Entrance Animation (Fade-in + Spring Scale)
     Animated.parallel([
@@ -142,12 +190,11 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
               />
             </View>
           </View>
-
           {/* Official Accreditation Pill */}
           <View style={[styles.kmcCivicTag, { borderColor: primaryAccent + '35' }]}>
             <View style={[styles.pulseMiniDot, { backgroundColor: primaryAccent }]} />
             <Text style={[styles.kmcCivicTagText, { color: primaryAccent }]}>
-              KMC SMART PARKING CIVIC GRID
+              SMART PARKING
             </Text>
           </View>
 
@@ -155,15 +202,10 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
           <Text style={[styles.title, { color: primaryAccent }]}>
             S-Parking
           </Text>
-
           {/* Tagline */}
           <Text style={styles.subtitle}>
-            Park Smart Parking • Move Better
+            Park Smart Parking
           </Text>
-          <Text style={styles.subCityNotice}>
-            Official Automated Municipal Mobility • Kolkata
-          </Text>
-
           {/* 3. Sleek Live Initializing Track Bar */}
           <View style={styles.loadingTrackContainer}>
             <View style={styles.loadingTrackBg}>
@@ -178,7 +220,7 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
               />
             </View>
             <Text style={styles.loadingStatusText}>
-              Connecting to live bay sensors...
+              Connecting to live  sensors...
             </Text>
           </View>
 

@@ -133,7 +133,7 @@ export default function BookingScreen({ onBack, onBookNew }: BookingScreenProps)
       {/* ================= 1. THEMED ENTERPRISE NAVBAR ================= */}
       <CivicNavbar
         title="Parking Bookings"
-        subtitle="Real-time barrier passes & records"
+        subtitle=""
         onBack={onBack}
         rightContent={
           <Pressable
@@ -248,7 +248,7 @@ export default function BookingScreen({ onBack, onBookNew }: BookingScreenProps)
               <View style={s.infoGrid}>
                 {/* Slot Slot */}
                 <View style={s.infoCol}>
-                  <Text style={s.infoLabel}>PARKING BAY</Text>
+                  <Text style={s.infoLabel}>SMART PARKING</Text>
                   <View style={s.slotPill}>
                     <Text style={s.slotText}>{item.slotNumber}</Text>
                   </View>
@@ -365,7 +365,7 @@ export default function BookingScreen({ onBack, onBookNew }: BookingScreenProps)
             {/* Pass Details Breakdown */}
             <View style={s.passGrid}>
               <View style={s.passGridCol}>
-                <Text style={s.passGridLabel}>ASSIGNED BAY</Text>
+                <Text style={s.passGridLabel}>ASSIGNED</Text>
                 <Text style={s.passGridValHighlight}>{showQrModal?.slotNumber}</Text>
               </View>
               <View style={s.passGridCol}>

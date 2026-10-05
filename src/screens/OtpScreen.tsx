@@ -35,7 +35,7 @@ export default function OtpScreen({
   onBack: () => void;
   onNext: (session: UserSession) => void;
 }) {
-  const [otp, setOtp] = useState(initialOtpForGateway || '');
+  const [otp, setOtp] = useState('');
   const [countdown, setCountdown] = useState(45);
   const [canResend, setCanResend] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

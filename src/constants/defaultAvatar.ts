@@ -9,7 +9,7 @@ export const DEFAULT_CITIZEN_AVATAR_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACA
  * If the user has uploaded an image, it returns that image.
  * Otherwise, it falls back to a clean default user icon.
  */
-export const getCitizenAvatarSource = (base64String?: string | null) => {
+export const getCitizenAvatarSource = (base64String?: string | null, modifiedOn?: string | null) => {
   if (
     !base64String ||
     base64String === DEFAULT_CITIZEN_AVATAR_BASE64 ||
@@ -17,13 +17,14 @@ export const getCitizenAvatarSource = (base64String?: string | null) => {
   ) {
     return require('../../assets/icons/nav_account.png');
   }
-  
+
   const cleanString = base64String.replace(/[\r\n]+/g, '').trim();
 
   if (cleanString.startsWith('http') || cleanString.startsWith('https')) {
-    return { uri: cleanString };
+    const cacheBuster = modifiedOn ? `?t=${encodeURIComponent(modifiedOn)}` : '';
+    return { uri: `${cleanString}${cacheBuster}` };
   }
-  
+
   if (cleanString.startsWith('data:image')) {
     return { uri: cleanString };
   }

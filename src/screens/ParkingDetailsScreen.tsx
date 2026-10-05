@@ -28,6 +28,7 @@ import CarLoader from '../components/CarLoader';
 interface ParkingDetailsScreenProps {
   onBack: () => void;
   onReserveSlot: () => void;
+  onAddVehicle?: () => void;
 }
 
 const AMENITIES = [
@@ -39,7 +40,7 @@ const AMENITIES = [
   { id: 'wheelchair', label: 'Wheelchair\nAccessible', icon: require('../../assets/icons/icon_wheelchair.png') },
 ];
 
-export default function ParkingDetailsScreen({ onBack, onReserveSlot }: ParkingDetailsScreenProps) {
+export default function ParkingDetailsScreen({ onBack, onReserveSlot, onAddVehicle }: ParkingDetailsScreenProps) {
   const insets = useSafeAreaInsets();
   const [isFavorite, setIsFavorite] = useState(false);
   const [isBookingLoading, setIsBookingLoading] = useState(false);
@@ -47,10 +48,10 @@ export default function ParkingDetailsScreen({ onBack, onReserveSlot }: ParkingD
   const userLoc = citizenService.getUserLocation();
   const mapRef = useRef<any>(null);
 
-  const [alertModal, setAlertModal] = useState<{ type: 'error' | 'info' | 'success'; title: string; message: string } | null>(null);
+  const [alertModal, setAlertModal] = useState<{ type: 'error' | 'info' | 'success'; title: string; message: string; action?: { label: string; onPress: () => void } } | null>(null);
 
-  const showAlert = (type: 'error' | 'info' | 'success', title: string, message: string) => {
-    setAlertModal({ type, title, message });
+  const showAlert = (type: 'error' | 'info' | 'success', title: string, message: string, action?: { label: string; onPress: () => void }) => {
+    setAlertModal({ type, title, message, action });
   };
 
   const formatDisplayDate = (d: Date) => {
@@ -209,7 +210,7 @@ export default function ParkingDetailsScreen({ onBack, onReserveSlot }: ParkingD
             {/* Title & Distance info */}
             <View style={s.infoContent}>
               <View style={s.titleDistanceRow}>
-                <Text style={s.parkingName} numberOfLines={2}>
+                <Text style={s.parkingName}>
                   {lot?.location || lot?.name || 'Parking Area'}
                 </Text>
               </View>
@@ -222,7 +223,7 @@ export default function ParkingDetailsScreen({ onBack, onReserveSlot }: ParkingD
                   style={s.realPinIcon}
                   resizeMode="contain"
                 />
-                <Text style={s.addressText} numberOfLines={2}>
+                <Text style={s.addressText}>
                   {lot?.address || 'Address not available'}
                 </Text>
               </View>
@@ -294,7 +295,7 @@ export default function ParkingDetailsScreen({ onBack, onReserveSlot }: ParkingD
                 <Text style={s.fareRupeeIcon}>₹</Text>
               </View>
               <View>
-                <Text style={s.fareHeading}>PARKING TARIFF</Text>
+                <Text style={s.fareHeading}>PARKING TRAFFIC</Text>
                 <Text style={s.fareSub}>Standard base rates per hour</Text>
               </View>
             </View>
@@ -356,7 +357,7 @@ export default function ParkingDetailsScreen({ onBack, onReserveSlot }: ParkingD
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.timingLabel}>Supervised by</Text>
-                <Text style={s.authorityVal}>Kolkata Municipal Corp.</Text>
+                <Text style={s.authorityVal}>Smart Parking</Text>
               </View>
             </View>
           </View>
@@ -394,12 +395,25 @@ export default function ParkingDetailsScreen({ onBack, onReserveSlot }: ParkingD
         </Pressable>
 
         <Pressable
-          onPress={() => {
+          onPress={async () => {
             setIsBookingLoading(true);
-            setTimeout(() => {
+            try {
+              const vehicles = await citizenService.getCitizenVehicles();
+              setIsBookingLoading(false);
+              if (!vehicles || vehicles.length === 0) {
+                showAlert('info', 'No Vehicle Found', 'You need to add a vehicle before reserving a parking slot.', {
+                  label: 'Add Vehicle',
+                  onPress: () => {
+                    if (onAddVehicle) onAddVehicle();
+                  }
+                });
+                return;
+              }
+              onReserveSlot();
+            } catch (err) {
               setIsBookingLoading(false);
               onReserveSlot();
-            }, 1200);
+            }
           }}
           style={({ pressed }) => [s.bookNowBtn, pressed && s.bookNowBtnPressed]}>
           <Image
@@ -434,11 +448,30 @@ export default function ParkingDetailsScreen({ onBack, onReserveSlot }: ParkingD
 
             <Text style={s.alertMessage}>{alertModal?.message}</Text>
 
-            <Pressable
-              style={s.alertBtn}
-              onPress={() => setAlertModal(null)}>
-              <Text style={s.alertBtnText}>Got It</Text>
-            </Pressable>
+            {alertModal?.action ? (
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 4, width: '100%' }}>
+                <Pressable
+                  style={[s.alertBtn, { flex: 1, backgroundColor: '#F1F5F9' }]}
+                  onPress={() => setAlertModal(null)}>
+                  <Text style={[s.alertBtnText, { color: '#64748B' }]}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[s.alertBtn, { flex: 1, backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    const action = alertModal.action;
+                    setAlertModal(null);
+                    if (action?.onPress) action.onPress();
+                  }}>
+                  <Text style={s.alertBtnText}>{alertModal.action.label}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                style={s.alertBtn}
+                onPress={() => setAlertModal(null)}>
+                <Text style={s.alertBtnText}>Got It</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </Modal>
@@ -558,7 +591,7 @@ const s = StyleSheet.create({
   },
   addressRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 4,
     marginTop: 4,
   },
@@ -566,6 +599,7 @@ const s = StyleSheet.create({
     width: 12,
     height: 12,
     tintColor: '#64748B',
+    marginTop: 2,
   },
   addressText: {
     fontSize: 11,

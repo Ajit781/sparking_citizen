@@ -42,17 +42,23 @@ export default function DashboardScreen({go}: DashboardScreenProps) {
             const percent = calculateProfileCompletion(profile);
             setProfileCompletionPercent(percent);
             if (!profile.profile_complete || percent < 100) {
-              setTimeout(() => {
-                setShowProfilePromptModal(true);
-              }, 700);
+              if (!citizenService.hasShownProfilePrompt) {
+                setTimeout(() => {
+                  setShowProfilePromptModal(true);
+                  citizenService.hasShownProfilePrompt = true;
+                }, 700);
+              }
             }
           }
         } catch (err) {
           console.log('[DashboardScreen] Initial profile check notice:', err);
           setProfileCompletionPercent(25);
-          setTimeout(() => {
-            setShowProfilePromptModal(true);
-          }, 700);
+          if (!citizenService.hasShownProfilePrompt) {
+            setTimeout(() => {
+              setShowProfilePromptModal(true);
+              citizenService.hasShownProfilePrompt = true;
+            }, 700);
+          }
         }
       }
     });
@@ -255,7 +261,7 @@ export default function DashboardScreen({go}: DashboardScreenProps) {
 
             <Text style={s.promptTitle}>Profile {profileCompletionPercent}% Completed</Text>
             <Text style={s.promptDesc}>
-              Complete your Citizen Profile to activate automatic Fastag deductions, reserved smart slots, and digital receipts across Kolkata.
+              Complete your Citizen Profile to activate automatic deductions, reserved smart slots, and digital receipts across Kolkata.
             </Text>
 
             {/* Progress Bar */}

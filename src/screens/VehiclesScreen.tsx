@@ -18,7 +18,7 @@ import { colors } from '../theme/colors';
 import { citizenService } from '../services/citizenService';
 import CivicNavbar from '../components/CivicNavbar';
 import CarLoader from '../components/CarLoader';
-import { getVehicleImageSource } from '../constants/defaultVehicleImage';
+import { getVehicleImageSource, DEFAULT_VEHICLE_IMAGE_BASE64 } from '../constants/defaultVehicleImage';
 import { getErrorMessage } from '../utils/errorUtils';
 import ErrorModal from '../components/ErrorModal';
 
@@ -183,24 +183,9 @@ export default function VehiclesScreen({ onBack, onAdd, onEdit }: VehiclesScreen
         ]}
         showsVerticalScrollIndicator={false}>
 
-        {/* Header Subtitle */}
-        <Text style={s.sectionSubtitle}>
-          Manage your saved vehicles for automatic barrier entry & contactless FASTag deduction.
-        </Text>
 
-        {/* ================= ADD MORE BUTTON (NOW ON TOP) ================= */}
-        <Pressable
-          onPress={onAdd}
-          style={({ pressed }) => [s.addTopBtn, pressed && s.addTopBtnPressed]}>
-          <View style={s.plusCircle}>
-            <Text style={s.plusIcon}>+</Text>
-          </View>
-          <View style={s.addTopTextCol}>
-            <Text style={s.addTopTitle}>Add New Vehicle</Text>
-            <Text style={s.addTopSub}>Register a car, bike or commercial vehicle</Text>
-          </View>
-          <Text style={s.arrowRight}>→</Text>
-        </Pressable>
+
+
 
         {/* Section Header */}
         <View style={s.listHeaderRow}>
@@ -219,13 +204,13 @@ export default function VehiclesScreen({ onBack, onAdd, onEdit }: VehiclesScreen
               <View style={s.cardTop}>
                 <Pressable
                   onPress={() => {
-                    if (v.vehicle_image) {
+                    if (v.vehicle_image && v.vehicle_image !== DEFAULT_VEHICLE_IMAGE_BASE64) {
                       setSelectedImage(v.vehicle_image);
                     }
                   }}
-                  style={[s.iconBox, v.vehicle_image ? s.photoBox : null]}>
-                  {v.vehicle_image ? (
-                    <Image source={getVehicleImageSource(v.vehicle_image)} style={s.vehPhoto} />
+                  style={[s.iconBox, (v.vehicle_image && v.vehicle_image !== DEFAULT_VEHICLE_IMAGE_BASE64) ? s.photoBox : null]}>
+                  {v.vehicle_image && v.vehicle_image !== DEFAULT_VEHICLE_IMAGE_BASE64 ? (
+                    <Image source={getVehicleImageSource(v.vehicle_image, v.modified_on)} style={s.vehPhoto} />
                   ) : (
                     <Image source={getVehicleIcon(v.vehicle_type_id)} style={s.vehIcon} resizeMode="contain" />
                   )}

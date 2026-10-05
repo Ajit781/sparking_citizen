@@ -22,21 +22,24 @@ import ImageCropPicker from 'react-native-image-crop-picker';
 import { colors } from '../theme/colors';
 import { citizenService, calculateProfileCompletion } from '../services/citizenService';
 import { storageService, UserSession } from '../services/storageService';
+import { authService } from '../services/authService';
 import {
   getCitizenAvatarSource,
   getCleanBase64,
 } from '../constants/defaultAvatar';
 import CarLoader from '../components/CarLoader';
 import ImagePickerActionSheet from '../components/ImagePickerActionSheet';
+import VisionCamera from '../components/VisionCamera';
 import { getErrorMessage } from '../utils/errorUtils';
 import ErrorModal from '../components/ErrorModal';
 
 interface SetupProfileScreenProps {
   onBack?: () => void;
   onSuccess?: () => void;
+  onLogout?: () => void;
 }
 
-export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileScreenProps) {
+export default function SetupProfileScreen({ onBack, onSuccess, onLogout }: SetupProfileScreenProps) {
   const insets = useSafeAreaInsets();
 
   const [session, setSession] = useState<UserSession | null>(null);
@@ -51,6 +54,7 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
   const [isLocating, setIsLocating] = useState<boolean>(false);
 
   const [profilePic, setProfilePic] = useState<string>('');
+  const [modifiedOn, setModifiedOn] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -58,6 +62,7 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
   // Success Modal State
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [showVisionCamera, setShowVisionCamera] = useState(false);
   const [successName, setSuccessName] = useState('');
 
   // Dynamic progress calculation
@@ -123,7 +128,7 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
             setLongitude('88.3639');
           }
         },
-        { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
       );
     }
   };
@@ -151,6 +156,7 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
             if (profile.longitude) setLongitude(String(profile.longitude));
             if (profile.profile_pic && profile.profile_pic.trim().length > 10) {
               setProfilePic(profile.profile_pic.trim());
+              setModifiedOn(profile.modified_on || new Date().getTime().toString());
             }
           }
         } catch (e) {
@@ -191,9 +197,9 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
       const image = await ImageCropPicker.openPicker({
         mediaType: 'photo',
         includeBase64: true,
-        compressImageQuality: 0.8,
-        compressImageMaxWidth: 800,
-        compressImageMaxHeight: 800,
+        compressImageQuality: 0.3,
+        compressImageMaxWidth: 400,
+        compressImageMaxHeight: 400,
       });
 
       if (image.data) {
@@ -210,26 +216,8 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
     const hasPermission = await requestCameraPermission();
     if (!hasPermission) return;
     setShowImagePicker(false);
-    
-    setTimeout(async () => {
-      try {
-        const image = await ImageCropPicker.openCamera({
-          mediaType: 'photo',
-          includeBase64: true,
-          compressImageQuality: 0.8,
-          compressImageMaxWidth: 800,
-          compressImageMaxHeight: 800,
-        });
-
-        if (image.data) {
-          setProfilePic(image.data);
-        }
-      } catch (e: any) {
-        if (e.code !== 'E_PICKER_CANCELLED' && e.message !== 'User cancelled image selection') {
-          console.error('Camera capture error: ', e);
-          Alert.alert('Error', 'Failed to capture photo from camera.');
-        }
-      }
+    setTimeout(() => {
+      setShowVisionCamera(true);
     }, 500);
   };
 
@@ -255,7 +243,7 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
     try {
       const cleanB64 = getCleanBase64(profilePic);
       console.log('🖼️ [ProfileUpdate] Image length:', cleanB64.length, 'Prefix:', cleanB64.substring(0, 30));
-      
+
       const result = await citizenService.registerCitizenProfile({
         login_user_id: session?.login_user_id,
         full_name: fullName.trim(),
@@ -276,6 +264,24 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
     }
   };
 
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await authService.logout();
+            if (onLogout) onLogout();
+          },
+        },
+      ]
+    );
+  };
+
   const displayGPS = latitude && longitude
     ? `${parseFloat(latitude).toFixed(4)}, ${parseFloat(longitude).toFixed(4)}`
     : isLocating ? 'Detecting GPS...' : 'GPS Available';
@@ -287,13 +293,12 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
       {/* ================= 1. TOP NAVBAR ================= */}
       <CivicNavbar
         title="Complete Profile"
-        subtitle="Official Citizen Registry"
-        badge="KMC GOV"
+        subtitle="Manage your personal details"
         onBack={onBack}
         rightContent={
           <View style={s.logoContainer}>
             <Image
-              source={require('../../assets/splash_badge_saffron.png')}
+              source={require('../../assets/SmartParkingLogo.png')}
               style={s.logoImage}
               resizeMode="contain"
             />
@@ -320,12 +325,12 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
                 <View style={s.progressTitleRow}>
                   <Text style={s.progressLabel}>Citizen Profile Score</Text>
                   <View style={s.registryBadge}>
-                    <Text style={s.registryBadgeText}>KMC RECORD</Text>
+                    <Text style={s.registryBadgeText}>RECORD</Text>
                   </View>
                 </View>
                 <Text style={s.progressSubtitle}>
                   {currentCompletion === 100
-                    ? 'All details verified! 1-Tap FASTag pass ready 🎉'
+                    ? 'All details verified! 1-Tap pass ready 🎉'
                     : 'Complete remaining details to activate automatic slot clearance'}
                 </Text>
               </View>
@@ -347,7 +352,7 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
               style={({ pressed }) => [s.avatarTouch, pressed && { opacity: 0.9 }]}>
               <View style={s.avatarGlowRing}>
                 <Image
-                  source={getCitizenAvatarSource(profilePic)}
+                  source={getCitizenAvatarSource(profilePic, modifiedOn)}
                   style={s.avatarImage}
                   resizeMode="cover"
                 />
@@ -472,9 +477,9 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
               />
             </View>
             <View style={s.geoInfoCol}>
-              <Text style={s.geoTitle}>Kolkata Municipal Corporation</Text>
+              <Text style={s.geoTitle}>Location Services</Text>
               <Text style={s.geoSub}>
-                CIVIC JURISDICTION • GPS {displayGPS}
+                GPS {displayGPS}
               </Text>
             </View>
             <View style={s.secureBadge}>
@@ -521,6 +526,18 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
             </Text>
           </View>
 
+          {/* ================= 7. LOGOUT BUTTON ================= */}
+          <Pressable onPress={handleLogout} style={s.logoutBtn}>
+            <View style={s.logoutBtnContent}>
+              <Image
+                source={require('../../assets/icons/icon_logout.png')}
+                style={s.logoutIcon}
+                resizeMode="contain"
+              />
+              <Text style={s.logoutBtnText}>Sign Out</Text>
+            </View>
+          </Pressable>
+
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -555,7 +572,7 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
               </View>
               <View style={s.checkRow}>
                 <Text style={s.checkGreen}>✓</Text>
-                <Text style={s.checkText}>FASTag Enabled</Text>
+                <Text style={s.checkText}>Pass Enabled</Text>
               </View>
             </View>
 
@@ -588,6 +605,15 @@ export default function SetupProfileScreen({ onBack, onSuccess }: SetupProfileSc
         visible={!!apiError}
         message={apiError || ''}
         onClose={() => setApiError(null)}
+      />
+
+      <VisionCamera
+        visible={showVisionCamera}
+        onClose={() => setShowVisionCamera(false)}
+        onCapture={(base64String) => {
+          setProfilePic(base64String);
+          setShowVisionCamera(false);
+        }}
       />
     </View>
   );
@@ -1034,5 +1060,32 @@ const s = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: '#FFFFFF',
+  },
+  logoutBtn: {
+    marginTop: 20,
+    width: '100%',
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoutBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  logoutIcon: {
+    width: 18,
+    height: 18,
+    tintColor: '#DC2626',
+  },
+  logoutBtnText: {
+    color: '#DC2626',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

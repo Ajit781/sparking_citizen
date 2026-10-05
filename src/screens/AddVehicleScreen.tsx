@@ -20,6 +20,7 @@ import CarLoader from '../components/CarLoader';
 import LoadingOverlay from '../components/LoadingOverlay';
 import { getErrorMessage } from '../utils/errorUtils';
 import ErrorModal from '../components/ErrorModal';
+import VisionCamera from '../components/VisionCamera';
 import ImagePickerActionSheet from '../components/ImagePickerActionSheet';
 import { colors } from '../theme/colors';
 import { citizenService } from '../services/citizenService';
@@ -129,6 +130,7 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
   const [showColorModal, setShowColorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
+  const [showVisionCamera, setShowVisionCamera] = useState(false);
   const [vehicleImage, setVehicleImage] = useState<string>(
     vehicle?.vehicle_image && vehicle.vehicle_image !== DEFAULT_VEHICLE_IMAGE_BASE64
       ? vehicle.vehicle_image
@@ -156,34 +158,11 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
     }
   };
 
-  const handleTakePhoto = async () => {
-    const hasPermission = await requestCameraPermission();
-    if (!hasPermission) {
-      Alert.alert('Permission Denied', 'Camera permission is required to capture your vehicle photo.');
-      return;
-    }
+  const handleTakePhoto = () => {
     setShowImagePickerModal(false);
-    
-    setTimeout(async () => {
-      try {
-        const image = await ImageCropPicker.openCamera({
-          mediaType: 'photo',
-          includeBase64: true,
-          compressImageQuality: 0.3,
-          compressImageMaxWidth: 400,
-          compressImageMaxHeight: 400,
-        });
-
-        if (image.data) {
-          setVehicleImage(image.data);
-        }
-      } catch (e: any) {
-        if (e.code !== 'E_PICKER_CANCELLED' && e.message !== 'User cancelled image selection') {
-          console.error('Camera capture error: ', e);
-          Alert.alert('Error', 'Failed to capture photo from camera.');
-        }
-      }
-    }, 500);
+    setTimeout(() => {
+      setShowVisionCamera(true);
+    }, 400); // Wait for action sheet to close
   };
 
   const handlePickFromGallery = async () => {
@@ -248,7 +227,7 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
         chassis_number: chassisNumber.trim(),
         engine_number: engineNumber.trim(),
         vehicle_color: vehicleColor.trim(),
-        vehicle_image: vehicleImage || DEFAULT_VEHICLE_IMAGE_BASE64,
+        vehicle_image: vehicleImage && vehicleImage !== DEFAULT_VEHICLE_IMAGE_BASE64 ? vehicleImage : '',
       };
 
       console.log('🚗 [VehicleUpdate] Image length:', payload.vehicle_image.length, 'Prefix:', payload.vehicle_image.substring(0, 30));
@@ -302,7 +281,7 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
         <View style={s.avatarSection}>
           <Pressable onPress={handlePickPhoto} style={s.avatarContainer}>
             <Image
-              source={getVehicleImageSource(vehicleImage)}
+              source={getVehicleImageSource(vehicleImage, vehicle?.modified_on)}
               style={s.avatarImage}
               resizeMode="cover"
             />
@@ -546,7 +525,7 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
                   </View>
                 </View>
                 <Text style={s.popupTitle}>Select Vehicle Type</Text>
-                <Text style={s.popupSubtitle}>Choose category for smart parking bays</Text>
+                <Text style={s.popupSubtitle}>Choose category for smart parking</Text>
               </View>
 
               <Pressable
@@ -726,6 +705,16 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
         onPickGallery={handlePickFromGallery}
         title="Add Vehicle Photo"
         subtitle="Choose a source to add your vehicle image"
+      />
+
+      {/* ================= IN-APP VISION CAMERA ================= */}
+      <VisionCamera
+        visible={showVisionCamera}
+        onClose={() => setShowVisionCamera(false)}
+        onCapture={(base64) => {
+          setVehicleImage(base64);
+          setShowVisionCamera(false);
+        }}
       />
 
       {/* ================= CAR LOADER ================= */}

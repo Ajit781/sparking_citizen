@@ -133,12 +133,12 @@ export default function ReserveParkingScreen({ onBack, onBookSuccess }: ReserveP
       {/* ================= 1. ULTRA-PREMIUM CIVIC NAVBAR ================= */}
       <CivicNavbar
         title="Reserve Parking"
-        subtitle={lot?.location || lot?.name || 'Smart Civic Slot'}
+        subtitle={lot?.location || lot?.name || 'Smart Slot'}
         onBack={onBack}
         rightContent={
           <View style={s.navRightPill}>
             <View style={s.livePulseMiniDot} />
-            <Text style={s.navRightPillText}>FASTag</Text>
+            <Text style={s.navRightPillText}>Smart</Text>
           </View>
         }
       />
@@ -150,7 +150,7 @@ export default function ReserveParkingScreen({ onBack, onBookSuccess }: ReserveP
         ]}
         showsVerticalScrollIndicator={false}>
 
-        {/* ================= 2. BAY CONTEXT SUMMARY CARD ================= */}
+        {/* ================= 2. CONTEXT SUMMARY CARD ================= */}
         <View style={s.slotSummaryCard}>
           <View style={s.slotIconCircle}>
             <Image
@@ -162,7 +162,7 @@ export default function ReserveParkingScreen({ onBack, onBookSuccess }: ReserveP
 
           <View style={s.slotInfoCol}>
             <View style={s.slotTitleRow}>
-              <Text style={s.slotNameText} numberOfLines={1}>
+              <Text style={s.slotNameText}>
                 {lot?.location || lot?.name || 'Parking Slot'}
               </Text>
               <View style={s.verifiedTag}>
@@ -181,8 +181,8 @@ export default function ReserveParkingScreen({ onBack, onBookSuccess }: ReserveP
                 style={s.pinMini}
                 resizeMode="contain"
               />
-              <Text style={s.slotAddressText} numberOfLines={1}>
-                {lot?.address || 'Kolkata Smart Mobility Grid'}
+              <Text style={s.slotAddressText}>
+                {lot?.address || 'Kolkata Smart Mobility'}
               </Text>
             </View>
           </View>
@@ -398,6 +398,7 @@ export default function ReserveParkingScreen({ onBack, onBookSuccess }: ReserveP
           mode="time"
           display={Platform.OS === 'android' ? 'clock' : 'spinner'}
           is24Hour={false}
+          minimumDate={new Date()}
           onChange={(_, date) => {
             setShowStartTimePicker(false);
             if (date) {
@@ -430,6 +431,7 @@ export default function ReserveParkingScreen({ onBack, onBookSuccess }: ReserveP
           mode="time"
           display={Platform.OS === 'android' ? 'clock' : 'spinner'}
           is24Hour={false}
+          minimumDate={startDate || new Date()}
           onChange={(_, date) => {
             setShowEndTimePicker(false);
             if (date) {
@@ -459,10 +461,6 @@ export default function ReserveParkingScreen({ onBack, onBookSuccess }: ReserveP
                   </View>
                 </View>
                 <Text style={s.ticketMainHeading}>Reservation Confirmed!</Text>
-                <Text style={s.ticketSubHeading}>Barrier entry pass is active & ready</Text>
-                <View style={s.fastagClearanceTag}>
-                  <Text style={s.fastagClearanceText}>⚡ AUTOMATED FASTAG PASS</Text>
-                </View>
               </View>
 
               {/* Perforated Tear Line */}
@@ -657,7 +655,7 @@ const s = StyleSheet.create({
   },
   slotTitleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 6,
   },
   slotNameText: {
@@ -674,6 +672,7 @@ const s = StyleSheet.create({
     paddingVertical: 1.5,
     borderRadius: 4,
     gap: 2,
+    marginTop: 2,
   },
   shieldMini: {
     width: 9,
@@ -687,7 +686,7 @@ const s = StyleSheet.create({
   },
   slotAddressRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginTop: 3,
     gap: 3,
   },
@@ -695,6 +694,7 @@ const s = StyleSheet.create({
     width: 11,
     height: 11,
     tintColor: '#64748B',
+    marginTop: 2,
   },
   slotAddressText: {
     fontSize: 11,

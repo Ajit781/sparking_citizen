@@ -115,7 +115,7 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
   }, [grievances]);
 
   const renderItem = ({ item }: { item: any }) => {
-    const typeName = item?.grievance_type?.name || item.grievance_type_name || 'Civic Grievance';
+    const typeName = item?.grievance_type?.name || item.grievance_type_name || 'Grievance';
     const severityName = item?.severity?.name || item.severity_name || 'Medium';
     const statusName = item?.status?.name || item.status_name || 'Submitted';
     const ticketNo = item.grievance_no || item.ticket_no || item.id || 'N/A';
@@ -269,8 +269,8 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
       {/* ================= 1. REUSABLE CIVIC NAVBAR ================= */}
       <CivicNavbar
         title="My Grievances"
-        subtitle="Track & monitor civic issues"
-        badge="KMC SUPPORT"
+
+
         onBack={onBack}
         rightContent={
           onPostGrievance ? (
@@ -328,7 +328,7 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
           </Text>
           <Text style={s.emptySubtitle}>
             {activeFilter === 'ALL'
-              ? "You haven't reported any civic parking or slot issues yet."
+              ? "You haven't reported any parking or slot issues yet."
               : `You have no grievances under '${activeFilter.toLowerCase()}' status.`}
           </Text>
         </View>

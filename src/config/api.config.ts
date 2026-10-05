@@ -4,8 +4,8 @@
  */
 
 export const API_CONFIG = {
-  // Base URL for S-Parking REST APIs
-  BASE_URL: 'https://vigpl.com/SParkingRestAPI/api',
+  // Base URL for S-Parking REST APIs (Dynamically set from SplashScreen)
+  BASE_URL: '',
 
   // API Endpoints
   ENDPOINTS: {
@@ -26,6 +26,7 @@ export const API_CONFIG = {
     GET_CITIZEN_GRIEVANCE_TYPES: '/master/getCitizenGrievanceTypes',
     POST_CITIZEN_GRIEVANCE: '/citizen/postCitizenGrievance',
     GET_CITIZEN_GRIEVANCES: '/citizen/getCitizenGrievancesByLogin',
+    GET_ADMIN_PARKING_AREAS: '/admin/getAdminParkingAreasByLogin',
   },
 
   DEFAULT_FCM_TOKEN: 'sparking_citizen_fcm_token_default',

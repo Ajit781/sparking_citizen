@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   View,
+  Linking,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { authService, GenerateOtpResult } from '../services/authService';
@@ -29,7 +30,7 @@ export default function LoginScreen({
   onNext: (mobile: string, otpResult?: GenerateOtpResult) => void;
 }) {
   const [mobileNumber, setMobileNumber] = useState('');
-  const [agreed, setAgreed] = useState(true);
+  const [agreed, setAgreed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -78,123 +79,128 @@ export default function LoginScreen({
   return (
     <>
       <KeyboardAvoidingView
-      style={s.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        style={s.scrollView}
-        contentContainerStyle={s.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
-        {/* Top Hero Banner with City, Road & White Car */}
-        <View style={s.heroWrapper}>
-          <Image source={heroSource} style={s.heroImage} resizeMode="cover" />
-        </View>
-
-        {/* Rounded Bottom Sheet overlapping the Hero Image */}
-        <View style={s.bottomSheet}>
-          {/* Overlapping Center Badge */}
-          <View style={s.overlappingBadgeWrapper}>
-            <View style={s.badgeCard}>
-              <Image
-                source={badgeSource}
-                style={s.badgeImage}
-                resizeMode="contain"
-              />
-            </View>
+        style={s.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          style={s.scrollView}
+          contentContainerStyle={s.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          {/* Top Hero Banner with City, Road & White Car */}
+          <View style={s.heroWrapper}>
+            <Image source={heroSource} style={s.heroImage} resizeMode="cover" />
           </View>
 
-          {/* Center Welcome Section */}
-          <View style={s.formCard}>
-            <Text style={[s.title, { color: primaryDarkColor }]}>Welcome to Smart Parking</Text>
-            <Text style={s.subtitle}>Smart Parking for a Better Kolkata</Text>
-            <View style={[s.subAccentBar, { backgroundColor: primaryColor }]} />
-
-            {/* Dynamic Error Banner */}
-            {!!errorMessage && (
-              <View style={s.errorContainer}>
-                <Text style={s.errorIcon}>⚠️</Text>
-                <Text style={s.errorText}>{errorMessage}</Text>
-              </View>
-            )}
-
-            {/* Mobile Number Input Section */}
-            <View style={s.inputGroup}>
-              <Text style={[s.inputLabel, { color: primaryDarkColor }]}>Mobile Number</Text>
-              <View style={s.phoneInputRow}>
-                {/* Country Code with Indian Flag */}
-                <View style={s.countryCodeBox}>
-                  <Text style={s.flagEmoji}>🇮🇳</Text>
-                  <Text style={s.countryCodeText}>+91</Text>
-                  <Text style={s.chevronIcon}>⌵</Text>
-                </View>
-
-                {/* Vertical divider */}
-                <View style={s.inputDivider} />
-
-                {/* Text Input */}
-                <TextInput
-                  placeholder="Enter mobile number"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="phone-pad"
-                  maxLength={10}
-                  value={mobileNumber}
-                  onChangeText={text => {
-                    setMobileNumber(text.replace(/[^0-9]/g, ''));
-                    if (errorMessage) setErrorMessage(null);
-                  }}
-                  style={s.textInput}
+          {/* Rounded Bottom Sheet overlapping the Hero Image */}
+          <View style={s.bottomSheet}>
+            {/* Overlapping Center Badge */}
+            <View style={s.overlappingBadgeWrapper}>
+              <View style={s.badgeCard}>
+                <Image
+                  source={badgeSource}
+                  style={s.badgeImage}
+                  resizeMode="contain"
                 />
               </View>
-              <Text style={s.helperText}>Use your mobile number to continue</Text>
             </View>
 
-            {/* Terms and Conditions Checkbox */}
-            <Pressable
-              onPress={() => setAgreed(!agreed)}
-              style={s.termsRow}>
-              <View
-                style={[
-                  s.checkbox,
-                  agreed && { backgroundColor: primaryColor, borderColor: primaryColor },
-                ]}>
-                {agreed && <Text style={s.checkmarkText}>✓</Text>}
-              </View>
-              <Text style={s.termsText}>
-                I agree to the{' '}
-                <Text style={[s.termsLink, { color: primaryColor }]}>Terms & Conditions</Text> and{' '}
-                <Text style={[s.termsLink, { color: primaryColor }]}>Privacy Policy</Text>
-              </Text>
-            </Pressable>
+            {/* Center Welcome Section */}
+            <View style={s.formCard}>
+              <Text style={[s.title, { color: primaryDarkColor }]}>Welcome to Smart Parking</Text>
+              <Text style={s.subtitle}>Smart Parking</Text>
+              <View style={[s.subAccentBar, { backgroundColor: primaryColor }]} />
 
-            {/* Send OTP Button */}
-            {isLoading ? (
-              <View style={s.loaderWrap}>
-                <ActivityIndicator size="large" color={primaryColor} />
-                <Text style={[s.loaderText, { color: primaryColor }]}>Sending OTP...</Text>
-              </View>
-            ) : (
-              <Pressable
-                onPress={handleSendOtp}
-                style={({ pressed }) => [
-                  s.button,
-                  { backgroundColor: primaryColor },
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-                ]}>
-                <Text style={s.buttonText}>Send OTP</Text>
-                <View style={s.buttonArrowWrapper}>
-                  <Text style={s.buttonArrow}>→</Text>
+              {/* Dynamic Error Banner */}
+              {!!errorMessage && (
+                <View style={s.errorContainer}>
+                  <Text style={s.errorIcon}>⚠️</Text>
+                  <Text style={s.errorText}>{errorMessage}</Text>
                 </View>
-              </Pressable>
-            )}
-          </View>
+              )}
 
-          {/* Footer at the bottom */}
-          <View style={{ marginTop: 'auto', width: '100%', marginHorizontal: -22 }}>
-            <UmangSkylineFooter />
+              {/* Mobile Number Input Section */}
+              <View style={s.inputGroup}>
+                <Text style={[s.inputLabel, { color: primaryDarkColor }]}>Mobile Number</Text>
+                <View style={s.phoneInputRow}>
+                  {/* Country Code with Indian Flag */}
+                  <View style={s.countryCodeBox}>
+                    <Text style={s.flagEmoji}>🇮🇳</Text>
+                    <Text style={s.countryCodeText}>+91</Text>
+                    <Text style={s.chevronIcon}>⌵</Text>
+                  </View>
+
+                  {/* Vertical divider */}
+                  <View style={s.inputDivider} />
+
+                  {/* Text Input */}
+                  <TextInput
+                    placeholder="Enter mobile number"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="phone-pad"
+                    maxLength={10}
+                    value={mobileNumber}
+                    onChangeText={text => {
+                      setMobileNumber(text.replace(/[^0-9]/g, ''));
+                      if (errorMessage) setErrorMessage(null);
+                    }}
+                    style={s.textInput}
+                  />
+                </View>
+              </View>
+
+              {/* Terms and Conditions Checkbox */}
+              <Pressable
+                onPress={() => setAgreed(!agreed)}
+                style={s.termsRow}>
+                <View
+                  style={[
+                    s.checkbox,
+                    agreed && { backgroundColor: primaryColor, borderColor: primaryColor },
+                  ]}>
+                  {agreed && <Text style={s.checkmarkText}>✓</Text>}
+                </View>
+                <Text style={s.termsText}>
+                  I agree to the{' '}
+                  <Text 
+                    style={[s.termsLink, { color: primaryColor }]}
+                    onPress={() => Linking.openURL('http://www.s-parking.com/termscondition.html')}
+                  >Terms & Conditions</Text> and{' '}
+                  <Text 
+                    style={[s.termsLink, { color: primaryColor }]}
+                    onPress={() => Linking.openURL('http://www.s-parking.com/privacypolicy.html')}
+                  >Privacy Policy</Text>
+                </Text>
+              </Pressable>
+
+              {/* Send OTP Button */}
+              {isLoading ? (
+                <View style={s.loaderWrap}>
+                  <ActivityIndicator size="large" color={primaryColor} />
+                  <Text style={[s.loaderText, { color: primaryColor }]}>Sending OTP...</Text>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={handleSendOtp}
+                  style={({ pressed }) => [
+                    s.button,
+                    { backgroundColor: primaryColor },
+                    pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+                  ]}>
+                  <Text style={s.buttonText}>Send OTP</Text>
+                  <View style={s.buttonArrowWrapper}>
+                    <Text style={s.buttonArrow}>→</Text>
+                  </View>
+                </Pressable>
+              )}
+            </View>
+
+            {/* Footer at the bottom */}
+            <View style={{ marginTop: 'auto', width: '100%', marginHorizontal: -22 }}>
+              <UmangSkylineFooter />
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <ErrorModal
         visible={!!apiError}
@@ -414,6 +420,7 @@ const s = StyleSheet.create({
   },
   termsLink: {
     fontWeight: '800',
+    textDecorationLine: 'underline',
   },
   button: {
     width: '100%',

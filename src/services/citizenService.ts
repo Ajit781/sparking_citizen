@@ -144,6 +144,7 @@ class CitizenService {
   private cachedProfile: CitizenProfile | null = null;
   private selectedParkingDetails: any = null;
   private userLocation: { latitude: number, longitude: number } | null = null;
+  public hasShownProfilePrompt: boolean = false;
 
   private constructor() { }
 
@@ -203,6 +204,9 @@ class CitizenService {
         profileData = response.data;
       }
 
+      // Backend does not return modified_on for profile, so we inject a timestamp to bust cache
+      profileData.modified_on = new Date().getTime().toString();
+
       this.cachedProfile = profileData;
       console.log('✅ [CitizenService] Profile fetched successfully:', {
         name: profileData.full_name,
@@ -248,6 +252,7 @@ class CitizenService {
     };
 
     console.log(`📝 [CitizenService] Registering profile for login_user_id: ${resolvedUserId}`);
+    console.log(`📝 [CitizenService] Profile image length being sent: ${payloadData.profile_pic ? payloadData.profile_pic.length : 0}`);
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.REGISTER_CITIZEN_PROFILE, payload);
@@ -258,6 +263,11 @@ class CitizenService {
       } else {
         registeredData = response.data;
       }
+
+      // Backend does not return modified_on for profile, so we inject a timestamp to bust cache
+      registeredData.modified_on = new Date().getTime().toString();
+
+      console.log(`📝 [CitizenService] Profile register returned: ${JSON.stringify(registeredData)}`);
 
       this.cachedProfile = registeredData;
 
@@ -575,47 +585,63 @@ class CitizenService {
       }
     } catch (error: any) {
       console.error('❌ [CitizenService] Failed to fetch nearby parking areas:', error?.message || error);
-      return [];
+      throw error;
     }
   }
 
-  /**
-   * Fetch specific parking area details
-   */
-  public async getCitizenParkingAreaDetails(parkingAreaId: number, vehicleTypeId: number | null = null): Promise<any> {
-    const payloadData = {
-      parking_area_id: parkingAreaId,
-      vehicle_type_id: vehicleTypeId,
-    };
+    /**
+     * Fetch specific parking area details
+     */
+    public async getCitizenParkingAreaDetails(parkingAreaId: number, vehicleTypeId: number | null = null): Promise<any> {
+      const payloadData = {
+        parking_area_id: parkingAreaId,
+        vehicle_type_id: vehicleTypeId,
+      };
 
-    const payload = {
-      enc_data: JSON.stringify(payloadData),
-    };
+      const payload = {
+        enc_data: JSON.stringify(payloadData),
+      };
 
-    console.log(`🅿️ [CitizenService] Fetching details for parking area ID: ${parkingAreaId}`);
+      console.log(`🅿️ [CitizenService] Fetching details for parking area ID: ${parkingAreaId}`);
 
-    try {
-      const response = await apiClient.post(API_CONFIG.ENDPOINTS.GET_CITIZEN_PARKING_AREA_DETAILS, payload);
+      try {
+        const response = await apiClient.post(API_CONFIG.ENDPOINTS.GET_CITIZEN_PARKING_AREA_DETAILS, payload);
 
-      if (response.status === 'GEN_000' || response.status === true || response.status === 'success') {
-        let data = response.data;
-        if (typeof data === 'string') {
-          try {
-            data = JSON.parse(data);
-          } catch (e) {
-            console.warn('Failed to parse parking area details data string');
+        if (response.status === 'GEN_000' || response.status === true || response.status === 'success') {
+          let data = response.data;
+          if (typeof data === 'string') {
+            try {
+              data = JSON.parse(data);
+            } catch (e) {
+              console.warn('Failed to parse parking area details data string');
+            }
           }
+          console.log(`📋 [CitizenService] getCitizenParkingAreaDetails Response Data:`, JSON.stringify(data, null, 2));
+          return data;
+        } else {
+          throw new Error(response.message || 'Failed to fetch parking area details');
         }
-        console.log(`📋 [CitizenService] getCitizenParkingAreaDetails Response Data:`, JSON.stringify(data, null, 2));
-        return data;
-      } else {
-        throw new Error(response.message || 'Failed to fetch parking area details');
+      } catch (error: any) {
+        console.error('❌ [CitizenService] Failed to fetch parking area details:', error?.message || error);
+        return null;
       }
-    } catch (error: any) {
-      console.error('❌ [CitizenService] Failed to fetch parking area details:', error?.message || error);
-      return null;
     }
-  }
+
+    /**
+     * Fetch all parking areas (for search hints) using citizen endpoint instead of admin endpoint
+     * to avoid "Unsupported admin role" errors.
+     */
+    public async getAdminParkingAreas(): Promise<any[]> {
+        console.log(`📡 [CitizenService] Fetching all parking areas for search hints using citizen nearby API with large radius...`);
+        try {
+            // Using a central coordinate in Kolkata with a very large radius to get all parking areas
+            return await this.getCitizenNearbyParkingAreas(22.5726, 88.3639, 1000, null);
+        } catch (error: any) {
+            console.error('❌ [CitizenService] Failed to fetch parking areas for search hints:', error?.message || error);
+            return [];
+        }
+    }
+
 
   /**
    * Create a new booking

@@ -96,16 +96,16 @@ export default function App() {
       console.warn('Splash session check notice:', e);
     }
 
-    // Set the underlying screen so it mounts behind the splash
-    setScreen(nextScreen);
-
-    // Slowly fade out the splash screen
+    // Fade out the splash screen FIRST, then mount the next screen
+    // This prevents CarLoader from showing on top of the splash animation
     Animated.timing(splashOpacity, {
       toValue: 0,
       duration: 1000, // 1 second slow fade
       useNativeDriver: true,
     }).start(() => {
       setShowSplash(false);
+      // Only after splash is fully gone, mount the real screen
+      setScreen(nextScreen);
     });
   };
 
@@ -147,17 +147,21 @@ export default function App() {
       <SetupProfileScreen
         onBack={() => setScreen('home')}
         onSuccess={() => setScreen('profile')}
+        onLogout={() => setScreen('login')}
       />
     ) : screen === 'permission' ? (
       <PermissionScreen onNext={() => setScreen('home')} />
-    ) : screen === 'home' ? (
-      <HomeScreen go={handleNavigate} onLogout={() => setScreen('login')} />
-    ) : screen === 'dashboard' ? (
+    ) : screen === 'home' ? null
+    : screen === 'dashboard' ? (
       <DashboardScreen go={handleNavigate} />
     ) : screen === 'parkingDetails' ? (
       <ParkingDetailsScreen
         onBack={() => setScreen('home')}
         onReserveSlot={() => setScreen('reserveSlot')}
+        onAddVehicle={() => {
+          setEditingVehicle(null);
+          setScreen('addVehicle');
+        }}
       />
     ) : screen === 'reserveSlot' ? (
       <ReserveParkingScreen
@@ -224,7 +228,14 @@ export default function App() {
           barStyle={isSaffronHeader ? 'light-content' : 'dark-content'}
         />
         <View style={{ flex: 1, backgroundColor: isLightScreen ? '#FFFFFF' : colors.background }}>
-          {content}
+          {/* HomeScreen always stays mounted after login to keep map alive */}
+          {screen && !['guide1', 'login', 'otp', 'permission'].includes(screen) && (
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: screen === 'home' ? 'flex' : 'none' }}>
+              <HomeScreen go={handleNavigate} onLogout={() => setScreen('login')} isActive={screen === 'home'} />
+            </View>
+          )}
+          {/* Other screens render on top */}
+          {screen !== 'home' && content}
           {showBottomNav && <BottomNav active={screen!} go={handleNavigate} />}
         </View>
 

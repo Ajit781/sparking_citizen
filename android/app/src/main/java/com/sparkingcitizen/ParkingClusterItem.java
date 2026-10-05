@@ -11,13 +11,19 @@ public class ParkingClusterItem implements ClusterItem {
     private final String snippet;
     private final String id;
     private final boolean isSelected;
+    private final boolean isTap;
 
     public ParkingClusterItem(double lat, double lng, String title, String id, boolean isSelected) {
+        this(lat, lng, title, id, isSelected, false);
+    }
+
+    public ParkingClusterItem(double lat, double lng, String title, String id, boolean isSelected, boolean isTap) {
         this.position = new LatLng(lat, lng);
         this.title = title;
         this.snippet = "";
         this.id = id;
         this.isSelected = isSelected;
+        this.isTap = isTap;
     }
 
     @NonNull
@@ -46,9 +52,14 @@ public class ParkingClusterItem implements ClusterItem {
         return isSelected;
     }
 
+    public boolean isTap() {
+        return isTap;
+    }
+
     @Nullable
     @Override
     public Float getZIndex() {
+        if (isTap) return 200f;
         return isSelected ? 100f : 0f;
     }
 }

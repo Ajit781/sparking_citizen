@@ -16,8 +16,11 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.maps.android.clustering.ClusterManager;
 import com.google.maps.android.clustering.Cluster;
 
@@ -25,7 +28,16 @@ import java.util.Map;
 
 public class NativeMultiMapManager extends SimpleViewManager<MapView> {
     public static final String REACT_CLASS = "NativeMultiMap";
-    private ClusterManager<ParkingClusterItem> mClusterManager;
+    private java.util.Map<MapView, ClusterManager<ParkingClusterItem>> mClusterManagers = new java.util.HashMap<>();
+    private java.util.Map<MapView, GoogleMap> mGoogleMaps = new java.util.HashMap<>();
+
+    // Tap marker is kept OUTSIDE ClusterManager so it's never clustered and always visible on top
+    private java.util.Map<MapView, Marker> mTapMarkers = new java.util.HashMap<>();
+
+    // Pending region state per view
+    private java.util.Map<MapView, Double> mPendingLat = new java.util.HashMap<>();
+    private java.util.Map<MapView, Double> mPendingLng = new java.util.HashMap<>();
+    private java.util.Map<MapView, Float> mPendingZoom = new java.util.HashMap<>();
 
     @NonNull
     @Override
@@ -38,23 +50,35 @@ public class NativeMultiMapManager extends SimpleViewManager<MapView> {
     protected MapView createViewInstance(@NonNull ThemedReactContext reactContext) {
         MapView mapView = new MapView(reactContext);
         mapView.onCreate(null);
-        mapView.onResume(); // Force map to load
+        mapView.onResume();
 
         mapView.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(GoogleMap googleMap) {
-                // Initialize the manager with the context and the map.
-                mClusterManager = new ClusterManager<>(reactContext, googleMap);
-                
-                // Set the custom renderer
-                mClusterManager.setRenderer(new ParkingClusterRenderer(reactContext, googleMap, mClusterManager));
+                mGoogleMaps.put(mapView, googleMap);
 
-                // Point the map's listeners at the listeners implemented by the cluster manager.
-                googleMap.setOnCameraIdleListener(mClusterManager);
-                googleMap.setOnMarkerClickListener(mClusterManager);
-                
-                // Add click listener for individual clustered items
-                mClusterManager.setOnClusterItemClickListener(new ClusterManager.OnClusterItemClickListener<ParkingClusterItem>() {
+                if (mPendingLat.containsKey(mapView)) {
+                    double lat = mPendingLat.remove(mapView);
+                    double lng = mPendingLng.remove(mapView);
+                    float zoom = mPendingZoom.remove(mapView);
+                    googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lat, lng), zoom));
+                }
+
+                try {
+                    googleMap.setMyLocationEnabled(true);
+                    googleMap.getUiSettings().setMyLocationButtonEnabled(false);
+                } catch (SecurityException e) {
+                    e.printStackTrace();
+                }
+
+                ClusterManager<ParkingClusterItem> clusterManager = new ClusterManager<>(reactContext, googleMap);
+                clusterManager.setRenderer(new ParkingClusterRenderer(reactContext, googleMap, clusterManager));
+                mClusterManagers.put(mapView, clusterManager);
+
+                googleMap.setOnCameraIdleListener(clusterManager);
+                googleMap.setOnMarkerClickListener(clusterManager);
+
+                clusterManager.setOnClusterItemClickListener(new ClusterManager.OnClusterItemClickListener<ParkingClusterItem>() {
                     @Override
                     public boolean onClusterItemClick(ParkingClusterItem item) {
                         WritableMap event = Arguments.createMap();
@@ -64,12 +88,26 @@ public class NativeMultiMapManager extends SimpleViewManager<MapView> {
                                 mapView.getId(),
                                 "onMarkerPress",
                                 event);
+                        // Return false to let Google Maps automatically animate the camera to the marker
                         return false;
                     }
                 });
-                
-                // Add click listener for clusters to zoom in
-                mClusterManager.setOnClusterClickListener(new ClusterManager.OnClusterClickListener<ParkingClusterItem>() {
+
+                googleMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
+                    @Override
+                    public void onMapClick(LatLng point) {
+                        WritableMap event = Arguments.createMap();
+                        event.putDouble("latitude", point.latitude);
+                        event.putDouble("longitude", point.longitude);
+                        ReactContext reactContext = (ReactContext) mapView.getContext();
+                        reactContext.getJSModule(RCTEventEmitter.class).receiveEvent(
+                                mapView.getId(),
+                                "onMapPress",
+                                event);
+                    }
+                });
+
+                clusterManager.setOnClusterClickListener(new ClusterManager.OnClusterClickListener<ParkingClusterItem>() {
                     @Override
                     public boolean onClusterClick(Cluster<ParkingClusterItem> cluster) {
                         LatLngBounds.Builder builder = LatLngBounds.builder();
@@ -92,77 +130,108 @@ public class NativeMultiMapManager extends SimpleViewManager<MapView> {
 
     @Override
     public Map getExportedCustomDirectEventTypeConstants() {
-        return com.facebook.react.common.MapBuilder.of(
-            "onMarkerPress",
-            com.facebook.react.common.MapBuilder.of("registrationName", "onMarkerPress")
-        );
+        return com.facebook.react.common.MapBuilder.builder()
+            .put("onMarkerPress", com.facebook.react.common.MapBuilder.of("registrationName", "onMarkerPress"))
+            .put("onMapPress", com.facebook.react.common.MapBuilder.of("registrationName", "onMapPress"))
+            .build();
     }
+
+    private java.util.HashMap<MapView, String> mLastRegionStr = new java.util.HashMap<>();
 
     @ReactProp(name = "region")
     public void setRegion(MapView view, ReadableMap region) {
         if (region != null && region.hasKey("latitude") && region.hasKey("longitude")) {
             double lat = region.getDouble("latitude");
             double lng = region.getDouble("longitude");
-            
-            final float zoomLevel = region.hasKey("zoom") ? (float) region.getDouble("zoom") : 13.5f;
+            float zoomLevel = region.hasKey("zoom") ? (float) region.getDouble("zoom") : 14.0f;
 
-            view.getMapAsync(new OnMapReadyCallback() {
-                @Override
-                public void onMapReady(GoogleMap googleMap) {
-                    LatLng location = new LatLng(lat, lng);
-                    googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(location, zoomLevel));
-                }
-            });
+            // Prevent React Native re-renders from clobbering map state
+            String currentRegionStr = lat + "," + lng + "," + zoomLevel;
+            String lastRegionStr = mLastRegionStr.get(view);
+            if (currentRegionStr.equals(lastRegionStr)) {
+                return; // Ignore if region values haven't changed!
+            }
+            mLastRegionStr.put(view, currentRegionStr);
+
+            GoogleMap googleMap = mGoogleMaps.get(view);
+            if (googleMap != null) {
+                // Restore 400ms animation for smooth camera movement (search UI freeze is fixed)
+                googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lat, lng), zoomLevel), 400, null);
+            } else {
+                mPendingLat.put(view, lat);
+                mPendingLng.put(view, lng);
+                mPendingZoom.put(view, zoomLevel);
+            }
         }
     }
 
     @ReactProp(name = "markers")
     public void setMarkers(MapView view, ReadableArray markers) {
-        view.getMapAsync(new OnMapReadyCallback() {
-            @Override
-            public void onMapReady(GoogleMap googleMap) {
-                if (mClusterManager == null) return;
-                
-                mClusterManager.clearItems();
-
-                if (markers == null) {
-                    mClusterManager.cluster();
-                    return;
-                }
-
-                LatLngBounds.Builder builder = new LatLngBounds.Builder();
-                boolean hasMarkers = false;
-
-                for (int i = 0; i < markers.size(); i++) {
-                    ReadableMap m = markers.getMap(i);
-                    double lat = m.getDouble("latitude");
-                    double lng = m.getDouble("longitude");
-                    String id = m.getString("id");
-                    String title = m.hasKey("title") ? m.getString("title") : "";
-                    String color = m.hasKey("color") ? m.getString("color") : "red";
-
-                    boolean isSelected = "blue".equals(color);
-                    
-                    ParkingClusterItem offsetItem = new ParkingClusterItem(lat, lng, title, id, isSelected);
-                    mClusterManager.addItem(offsetItem);
-                    
-                    builder.include(new LatLng(lat, lng));
-                    hasMarkers = true;
-                }
-
-                mClusterManager.cluster();
-
-                if (hasMarkers) {
-                    try {
-                        if (view.getTag() == null) {
-                            view.setTag("centered");
-                            googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100));
-                        }
-                    } catch (Exception e) {
-                        // Ignore
+        GoogleMap googleMap = mGoogleMaps.get(view);
+        ClusterManager<ParkingClusterItem> clusterManager = mClusterManagers.get(view);
+        if (googleMap != null && clusterManager != null) {
+            applyMarkers(view, googleMap, clusterManager, markers);
+        } else {
+            view.getMapAsync(new OnMapReadyCallback() {
+                @Override
+                public void onMapReady(GoogleMap gMap) {
+                    ClusterManager<ParkingClusterItem> cm = mClusterManagers.get(view);
+                    if (cm != null) {
+                        applyMarkers(view, gMap, cm, markers);
                     }
                 }
-            }
-        });
+            });
+        }
     }
+
+    private void applyMarkers(MapView view, GoogleMap googleMap, ClusterManager<ParkingClusterItem> clusterManager, ReadableArray markers) {
+        if (clusterManager == null) return;
+
+        clusterManager.clearItems();
+
+        // Always remove old tap marker first
+        Marker oldTapMarker = mTapMarkers.get(view);
+        if (oldTapMarker != null) {
+            oldTapMarker.remove();
+            mTapMarkers.remove(view);
+        }
+
+        if (markers == null) {
+            clusterManager.cluster();
+            return;
+        }
+
+        for (int i = 0; i < markers.size(); i++) {
+            ReadableMap m = markers.getMap(i);
+            double lat = m.getDouble("latitude");
+            double lng = m.getDouble("longitude");
+            String id = m.getString("id");
+            String title = m.hasKey("title") ? m.getString("title") : "";
+            String color = m.hasKey("color") ? m.getString("color") : "red";
+            boolean isSelected = "blue".equals(color);
+            boolean isTap = "__tap_marker__".equals(id);
+
+            if (isTap) {
+                // Add tap marker DIRECTLY to GoogleMap — never clusters, always on top
+                ParkingClusterRenderer renderer = new ParkingClusterRenderer(
+                        view.getContext(), googleMap, clusterManager);
+                android.graphics.Bitmap tapBitmap = renderer.createTapMarkerBitmap();
+                MarkerOptions opts = new MarkerOptions()
+                        .position(new LatLng(lat, lng))
+                        .title(title)
+                        .zIndex(500) // Always above everything
+                        .icon(BitmapDescriptorFactory.fromBitmap(tapBitmap));
+                Marker tapMarker = googleMap.addMarker(opts);
+                if (tapMarker != null) {
+                    mTapMarkers.put(view, tapMarker);
+                }
+            } else {
+                ParkingClusterItem item = new ParkingClusterItem(lat, lng, title, id, isSelected, false);
+                clusterManager.addItem(item);
+            }
+        }
+
+        clusterManager.cluster();
+    }
+
 }

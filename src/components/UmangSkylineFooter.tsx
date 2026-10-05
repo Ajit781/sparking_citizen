@@ -76,7 +76,7 @@ export default function UmangSkylineFooter() {
         <View style={styles.whiteArch}>
           <Text style={styles.poweredByText}>Powered by</Text>
           <Text style={[styles.kmcText, {color: colors.primaryDark}]}>
-            Kolkata Municipal Corporation
+            Smart Parking
           </Text>
           <View style={styles.sloganRow}>
             <View style={[styles.sloganLine, {backgroundColor: colors.primary}]} />
