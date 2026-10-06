@@ -19,8 +19,6 @@ import {
     requireNativeComponent,
     RefreshControl,
     NativeModules,
-    Keyboard,
-    AppState,
 } from 'react-native';
 
 const NativeMultiMap = requireNativeComponent('NativeMultiMap');
@@ -34,7 +32,6 @@ import { citizenService, CitizenProfile, calculateProfileCompletion } from '../s
 import Geolocation from '@react-native-community/geolocation';
 import Voice, { SpeechResultsEvent, SpeechErrorEvent } from '@react-native-voice/voice';
 import CarLoader from '../components/CarLoader';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface HomeScreenProps {
     go: (s: ScreenName) => void;
@@ -46,7 +43,7 @@ let cachedParkingLots: any[] = [];
 let cachedMapRegion: any = null;
 let lastFetchTime: number = 0;
 
-export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreenProps) {
+export default function HomeScreen({ go, onLogout, isActive }: HomeScreenProps) {
     const insets = useSafeAreaInsets();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedAddress, setSelectedAddress] = useState('');
@@ -59,7 +56,6 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
     const [citizenProfile, setCitizenProfile] = useState<CitizenProfile | null>(null);
     const [profileCompletionPercent, setProfileCompletionPercent] = useState<number>(0);
     const [showProfilePromptModal, setShowProfilePromptModal] = useState<boolean>(false);
-    const [isMapFullScreen, setIsMapFullScreen] = useState(false);
 
     // Voice Search State
     const [isListening, setIsListening] = useState<boolean>(false);
@@ -68,13 +64,11 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
 
     // Google Places Search State
     const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [allAdminParkingAreas, setAllAdminParkingAreas] = useState<any[]>([]);
     const [isSearchingPlaces, setIsSearchingPlaces] = useState<boolean>(false);
-    const [displayCount, setDisplayCount] = useState<number>(10); // Prevents UI freeze by rendering only 10 items initially
     const GOOGLE_API_KEY = 'AIzaSyAcBZVUBHhKE_HU7t0JGFq6mQV-p-mBVXQ';
 
-    // Map Touch & Scroll Control — ref-based for instant synchronous locking
-    const scrollViewRef = useRef<ScrollView>(null);
+    // Map Touch & Scroll Control
+    const [mapScrollEnabled, setMapScrollEnabled] = useState<boolean>(true);
 
     const [isProfileLoaded, setIsProfileLoaded] = useState<boolean>(false);
     const [isFetchingDetails, setIsFetchingDetails] = useState<boolean>(false);
@@ -88,14 +82,10 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
 
     // Dynamic Parking Lots State
     const [parkingLots, setParkingLots] = useState<any[]>(cachedParkingLots);
-    const [showLots, setShowLots] = useState<boolean>(false);
     const [bookingDisabledModal, setBookingDisabledModal] = useState({ visible: false, lotName: '' });
-    const [mapPopup, setMapPopup] = useState<{ visible: boolean; title: string; message: string; isError: boolean } | null>(null);
     const [selectedParkingForModal, setSelectedParkingForModal] = useState<any>(null);
     const [markersReady, setMarkersReady] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [isFetchingMapClick, setIsFetchingMapClick] = useState(false);
-    const [tapMarker, setTapMarker] = useState<{ latitude: number; longitude: number, title?: string } | null>(null);
     const [mapRegion, setMapRegion] = useState<{
         latitude: number;
         longitude: number;
@@ -105,19 +95,12 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
     const [searchCenter, setSearchCenter] = useState<{ lat: number, lng: number } | null>(
         cachedMapRegion ? { lat: cachedMapRegion.latitude, lng: cachedMapRegion.longitude } : null
     );
-    const [isTabSwitching, setIsTabSwitching] = useState(false);
-
-    useEffect(() => {
-        if (!isActive) {
-            setSearchQuery('');
-            setSearchResults([]);
-            setIsSearchingPlaces(false);
-        }
-    }, [isActive]);
 
     const fetchNearbyParking = async (lat: number, lng: number, force = false, vType: number | null = null) => {
         setSearchCenter({ lat, lng });
         if (!force && cachedParkingLots.length > 0 && Date.now() - lastFetchTime < 300000) {
+            // Use cache — markers still need to be ready
+            setMarkersReady(true);
             return;
         }
         try {
@@ -125,107 +108,27 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
             if (data && data.length > 0) {
                 console.log('PARKING LOT DATA:', JSON.stringify(data[0]));
             }
-            setMarkersReady(false);
             cachedParkingLots = data || [];
             lastFetchTime = Date.now();
             setParkingLots(data || []);
-        } catch (error: any) {
+            // ✅ Mark markers ready so map renders them
+            setTimeout(() => setMarkersReady(true), 300);
+        } catch (error) {
             console.log('Failed to fetch nearby parking areas:', error);
-            const errorMsg = error?.message?.toLowerCase() || '';
-            const isNetworkError = errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('connect') || errorMsg.includes('timeout');
-
-            setMapPopup({
-                visible: true,
-                title: isNetworkError ? 'Connection Offline 📶' : 'Oops! Server Hiccup 🚗',
-                message: isNetworkError
-                    ? "It looks like you're offline or your network is weak. Please check your internet connection and try again."
-                    : "We couldn't fetch parking areas right now. Our servers might be taking a quick nap. Please try again in a moment!",
-                isError: true
-            });
-            setParkingLots([]);
         }
     };
-    const handleMapPress = async (e: any) => {
-        const lat = e.nativeEvent?.latitude || e.nativeEvent?.coordinate?.latitude;
-        const lng = e.nativeEvent?.longitude || e.nativeEvent?.coordinate?.longitude;
-        if (lat && lng) {
-            // Instantly show tap marker at pressed location
-            setTapMarker({ latitude: lat, longitude: lng, title: 'Map Selection' });
-
-            setMapRegion({
-                latitude: lat,
-                longitude: lng,
-                latitudeDelta: 0.05,
-                longitudeDelta: 0.05,
-            } as any);
-
-            // Show loader while fetching
-            setIsFetchingMapClick(true);
-            try {
-                console.log(`[MAP CLICK] Requesting parking areas for Lat: ${lat}, Lng: ${lng}`);
-                const data = await citizenService.getCitizenNearbyParkingAreas(lat, lng, 2, activeCategory);
-                console.log("[MAP CLICK API RESPONSE]:", JSON.stringify(data, null, 2));
-
-                if (data && data.length > 0) {
-                    cachedParkingLots = data;
-                    lastFetchTime = Date.now();
-                    setParkingLots(data);
-                } else {
-                    cachedParkingLots = [];
-                    lastFetchTime = Date.now();
-                    setParkingLots([]);
-                }
-            } catch (error: any) {
-                console.error("[MAP CLICK API ERROR]:", error);
-                setMapPopup({
-                    visible: true,
-                    title: 'Error Fetching Parking',
-                    message: error?.message || 'Server error. Please try again later.',
-                    isError: true
-                });
-                cachedParkingLots = [];
-                lastFetchTime = Date.now();
-                setParkingLots([]);
-            } finally {
-                setIsFetchingMapClick(false);
-                // Tap marker stays visible until user taps a new location
-            }
-        }
-    };
-
 
     const handleCategorySelect = (id: number | null) => {
         setActiveCategory(id);
-        setDisplayCount(10); // Reset list display count when filtering
-        // Priority: 1. Map Tap location → tapMarker
-        //           2. User searched a location → searchCenter
-        //           3. Default → GPS location (cachedMapRegion)
-        // DO NOT use mapRegion state — it goes stale after manual map pan!
-        const filterLat = tapMarker?.latitude ?? searchCenter?.lat ?? cachedMapRegion?.latitude;
-        const filterLng = tapMarker?.longitude ?? searchCenter?.lng ?? cachedMapRegion?.longitude;
-
-        if (filterLat && filterLng) {
-            citizenService.getCitizenNearbyParkingAreas(filterLat, filterLng, 2, id)
-                .then(data => {
-                    cachedParkingLots = data || [];
-                    lastFetchTime = Date.now();
-                    setParkingLots(data || []);
-                })
-                .catch((error: any) => {
-                    console.log('Filter fetch error:', error);
-                    setMapPopup({
-                        visible: true,
-                        title: 'Filter Error',
-                        message: error?.message || 'Server error. Please try again later.',
-                        isError: true
-                    });
-                });
+        if (searchCenter) {
+            fetchNearbyParking(searchCenter.lat, searchCenter.lng, true, id);
+        } else if (mapRegion) {
+            fetchNearbyParking(mapRegion.latitude, mapRegion.longitude, true, id);
         }
     };
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        setShowLots(true);
         if (searchCenter) {
             fetchNearbyParking(searchCenter.lat, searchCenter.lng, true, activeCategory).finally(() => setRefreshing(false));
         } else if (mapRegion) {
@@ -234,128 +137,6 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
             setRefreshing(false);
         }
     }, [mapRegion, searchCenter, activeCategory]);
-
-    // Refs to control when camera should follow user vs stay panned
-    const hasInitialLocationRef = useRef(false);
-    const shouldCenterOnUserRef = useRef(false);
-
-    const fetchFreshUserLocation = useCallback(async () => {
-        let hasPermission = false;
-        if (Platform.OS === 'android') {
-            try {
-                const check = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-                if (check) {
-                    hasPermission = true;
-                } else {
-                    const granted = await PermissionsAndroid.request(
-                        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-                        {
-                            title: 'Location Permission',
-                            message: 'S-Parking needs access to your location to show nearby parking slots.',
-                            buttonNeutral: 'Ask Me Later',
-                            buttonNegative: 'Cancel',
-                            buttonPositive: 'OK',
-                        },
-                    );
-                    hasPermission = granted === PermissionsAndroid.RESULTS.GRANTED;
-                }
-            } catch (err) {
-                console.warn(err);
-            }
-        } else {
-            hasPermission = true;
-        }
-
-        if (hasPermission) {
-            // Stage 1: Network/WiFi se turant location lo (< 1 second)
-            Geolocation.getCurrentPosition(
-                position => {
-                    const { latitude, longitude } = position.coords;
-                    console.log(`[HomeScreen] FAST location: Lat=${latitude}, Lng=${longitude}`);
-                    citizenService.setUserLocation({ latitude, longitude });
-                    const newRegion = { latitude, longitude, latitudeDelta: 0.008, longitudeDelta: 0.008, zoom: 17.0 };
-                    setMapRegion(newRegion);
-                    cachedMapRegion = newRegion;
-                    setSearchQuery(''); // Clear previous search text
-                    setTapMarker(null); // Clear previous blue tap marker
-                    fetchNearbyParking(latitude, longitude, true); // Force fetch API for new GPS location
-
-                    // Stage 2: GPS se accurate location (background mein refine)
-                    Geolocation.getCurrentPosition(
-                        pos2 => {
-                            const { latitude: lat2, longitude: lng2 } = pos2.coords;
-                            console.log(`[HomeScreen] GPS accurate: Lat=${lat2}, Lng=${lng2}`);
-                            citizenService.setUserLocation({ latitude: lat2, longitude: lng2 });
-                            const region2 = { latitude: lat2, longitude: lng2, latitudeDelta: 0.008, longitudeDelta: 0.008, zoom: 17.0 };
-                            setMapRegion(region2);
-                            cachedMapRegion = region2;
-                        },
-                        () => { /* GPS refine failed — Stage 1 location already shown */ },
-                        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-                    );
-                },
-                error => {
-                    console.log('[HomeScreen] Location Fetch ERROR:', error.code, error.message);
-                    if (error.code === 2) {
-                        Alert.alert(
-                            "Turn on Location",
-                            "Please enable Location Services (GPS) to see nearby parking slots.",
-                            [
-                                { text: "Cancel", style: "cancel" },
-                                {
-                                    text: "Settings",
-                                    onPress: () => {
-                                        if (Platform.OS === 'android') {
-                                            Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
-                                        } else {
-                                            Linking.openSettings();
-                                        }
-                                    }
-                                }
-                            ]
-                        );
-                    }
-                    if (!cachedMapRegion) {
-                        const defaultRegion = {
-                            latitude: 22.5726,
-                            longitude: 88.3639,
-                            latitudeDelta: 0.008,
-                            longitudeDelta: 0.008,
-                        };
-                        setMapRegion(defaultRegion);
-                        cachedMapRegion = defaultRegion;
-                        fetchNearbyParking(22.5726, 88.3639);
-                    }
-                },
-                { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
-            );
-        }
-    }, []);
-
-    // Jab bhi tab wapas HomeScreen pe aaye, instantly current GPS location pe camera move karo!
-    useEffect(() => {
-        if (isActive && cachedMapRegion) {
-            console.log('[HomeScreen] Tab active again -> instant camera snap to current GPS location');
-            setIsTabSwitching(true); // Loader start
-
-            // Clear any old tap marker when returning home — show fresh GPS state
-            setTapMarker(null);
-
-            // Force React Native to re-send the GPS mapRegion to Java
-            setMapRegion({
-                ...cachedMapRegion,
-                latitudeDelta: cachedMapRegion.latitudeDelta + (Math.random() * 0.0000001)
-            });
-
-            // Ensure P icons are loaded for the current GPS location
-            fetchNearbyParking(cachedMapRegion.latitude, cachedMapRegion.longitude, true);
-
-            // Map snap hone ke baad smoothly hide kar do
-            setTimeout(() => {
-                setIsTabSwitching(false);
-            }, 600); // 600ms loader to cover map rendering delay
-        }
-    }, [isActive]);
 
     useEffect(() => {
         citizenService.getCitizenVehicleTypes().then(types => {
@@ -370,31 +151,25 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
 
         authService.getStoredSession().then(async session => {
             if (session) {
-                console.log("[API RESPONSE - userSession]:", JSON.stringify(session, null, 2));
                 setUserSession(session);
                 try {
                     const profile = await citizenService.getCitizenProfile(session.login_user_id);
-                    console.log("[API RESPONSE - citizenProfile]:", JSON.stringify(profile, null, 2));
                     if (profile) {
                         setCitizenProfile(profile);
                         const percent = calculateProfileCompletion(profile);
                         setProfileCompletionPercent(percent);
                         if (!profile.profile_complete || percent < 100) {
-                            // Sirf pehli baar dikhao — AsyncStorage se check karo
-                            const storageKey = `profile_prompt_shown_${session.login_user_id}`;
-                            const alreadyShown = await AsyncStorage.getItem(storageKey);
-                            if (!alreadyShown) {
-                                setTimeout(() => {
-                                    setShowProfilePromptModal(true);
-                                    AsyncStorage.setItem(storageKey, 'true');
-                                }, 800);
-                            }
+                            setTimeout(() => {
+                                setShowProfilePromptModal(true);
+                            }, 800);
                         }
                     }
                 } catch (err) {
                     console.log('[HomeScreen] Initial profile check notice:', err);
                     setProfileCompletionPercent(25);
-                    // Don't show popup on catch — only on first load with confirmed profile
+                    setTimeout(() => {
+                        setShowProfilePromptModal(true);
+                    }, 800);
                 } finally {
                     setIsProfileLoaded(true);
                 }
@@ -412,170 +187,145 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
         Voice.onSpeechResults = onSpeechResults;
         Voice.onSpeechError = onSpeechError;
 
-        // Initial one-time fetch
-        fetchFreshUserLocation();
-
-        // Fetch all admin parking areas for search suggestions
-        citizenService.getAdminParkingAreas().then(areas => {
-            if (areas && areas.length > 0) {
-                setAllAdminParkingAreas(areas);
-            }
-        }).catch(err => console.log('Failed to fetch admin parking areas:', err));
-
-        // watchPosition: continuously track GPS
-        const watchId = Geolocation.watchPosition(
-            position => {
-                const { latitude, longitude } = position.coords;
-                console.log(`[HomeScreen] watchPosition UPDATE: Lat=${latitude}, Lng=${longitude}`);
-                citizenService.setUserLocation({ latitude, longitude });
-
-                const newRegion = {
-                    latitude,
-                    longitude,
-                    latitudeDelta: 0.008,
-                    longitudeDelta: 0.008,
-                };
-
-                if (!hasInitialLocationRef.current) {
-                    // First GPS fix ever — center map on user
-                    hasInitialLocationRef.current = true;
-                    setMapRegion(newRegion);
-                    cachedMapRegion = newRegion;
-                    fetchNearbyParking(latitude, longitude, true);
-                } else if (shouldCenterOnUserRef.current) {
-                    // User came back from Settings with GPS ON
-                    shouldCenterOnUserRef.current = false;
-                    setMapRegion(newRegion);
-                    cachedMapRegion = newRegion;
-                    fetchNearbyParking(latitude, longitude, true);
-                } else {
-                    // Just store GPS coords silently, don't move camera
-                    cachedMapRegion = newRegion;
+        const getUserLocation = async () => {
+            let hasPermission = false;
+            if (Platform.OS === 'android') {
+                try {
+                    const granted = await PermissionsAndroid.request(
+                        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                        {
+                            title: 'Location Permission',
+                            message: 'S-Parking needs access to your location to show nearby parking slots.',
+                            buttonNeutral: 'Ask Me Later',
+                            buttonNegative: 'Cancel',
+                            buttonPositive: 'OK',
+                        },
+                    );
+                    hasPermission = granted === PermissionsAndroid.RESULTS.GRANTED;
+                } catch (err) {
+                    console.warn(err);
                 }
-            },
-            error => {
-                console.log('[HomeScreen] watchPosition error:', error.code, error.message);
-            },
-            { enableHighAccuracy: true, distanceFilter: 30, interval: 5000, fastestInterval: 2000 }
-        );
+            } else {
+                hasPermission = true;
+            }
 
-        // AppState: jab user Settings se wapas aaye, seedha getCurrentPosition call karo
-        const appStateSub = AppState.addEventListener('change', nextAppState => {
-            if (nextAppState === 'active') {
-                // Stage 1: Network/WiFi se instant location lo (~500ms)
+            if (hasPermission) {
                 Geolocation.getCurrentPosition(
                     position => {
                         const { latitude, longitude } = position.coords;
-                        console.log(`[HomeScreen] Resume FAST location: Lat=${latitude}, Lng=${longitude}`);
                         citizenService.setUserLocation({ latitude, longitude });
-                        const newRegion = { latitude, longitude, latitudeDelta: 0.008, longitudeDelta: 0.008 };
+                        const newRegion = {
+                            latitude,
+                            longitude,
+                            latitudeDelta: 0.0922,
+                            longitudeDelta: 0.0421,
+                        };
                         setMapRegion(newRegion);
                         cachedMapRegion = newRegion;
-                        fetchNearbyParking(latitude, longitude, true);
-
-                        // Stage 2: GPS se accurate location lo (background mein)
-                        Geolocation.getCurrentPosition(
-                            pos2 => {
-                                const { latitude: lat2, longitude: lng2 } = pos2.coords;
-                                console.log(`[HomeScreen] Resume GPS location: Lat=${lat2}, Lng=${lng2}`);
-                                citizenService.setUserLocation({ latitude: lat2, longitude: lng2 });
-                                const region2 = { latitude: lat2, longitude: lng2, latitudeDelta: 0.008, longitudeDelta: 0.008 };
-                                setMapRegion(region2);
-                                cachedMapRegion = region2;
-                            },
-                            () => { /* GPS refine failed silently */ },
-                            { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
-                        );
+                        fetchNearbyParking(latitude, longitude);
                     },
                     error => {
-                        console.log('[HomeScreen] AppState resume location error:', error.code);
+                        console.warn('[HomeScreen] GPS unavailable:', error.message);
                     },
-                    { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
+                    { enableHighAccuracy: false, timeout: 20000, maximumAge: 10000 }
                 );
             }
-        });
-
-        return () => {
-            Geolocation.clearWatch(watchId);
-            appStateSub.remove();
         };
-    }, [fetchFreshUserLocation]);
 
+        getUserLocation();
+    }, []);
 
+    // ✅ Tab focus: re-fetch parking when user comes back to Home tab
+    useEffect(() => {
+        if (isActive) {
+            const loc = citizenService.getUserLocation();
+            if (loc) {
+                fetchNearbyParking(loc.latitude, loc.longitude, false, activeCategory);
+            } else if (mapRegion) {
+                fetchNearbyParking(mapRegion.latitude, mapRegion.longitude, false, activeCategory);
+            }
+        }
+    }, [isActive]);
 
-    // Debounced OpenStreetMap (Nominatim) Search & Admin Parking Areas Search
+    useEffect(() => {
+        if (parkingLots.length > 0) {
+            const coords = parkingLots
+                .map(lot => ({
+                    latitude: parseFloat(String(lot.latitude ?? lot.lat)),
+                    longitude: parseFloat(String(lot.longitude ?? lot.lng)),
+                }))
+                .filter(c => !isNaN(c.latitude) && !isNaN(c.longitude) && c.latitude !== 0 && c.longitude !== 0);
+
+            if (coords.length > 0) {
+                // Calculate center
+                const minLat = Math.min(...coords.map(c => c.latitude));
+                const maxLat = Math.max(...coords.map(c => c.latitude));
+                const minLng = Math.min(...coords.map(c => c.longitude));
+                const maxLng = Math.max(...coords.map(c => c.longitude));
+
+                const centerLat = (minLat + maxLat) / 2;
+                const centerLng = (minLng + maxLng) / 2;
+
+                setTimeout(() => {
+                    setMapRegion({
+                        latitude: centerLat,
+                        longitude: centerLng,
+                        latitudeDelta: 0.05 + Math.random() * 0.000001, // Jitter to force native update
+                        longitudeDelta: 0.05,
+                        zoom: 12.0
+                    } as any);
+                    setMarkersReady(true);
+                }, 800);
+            }
+        }
+    }, [parkingLots]);
+
+    // Debounced OpenStreetMap (Nominatim) Search
     useEffect(() => {
         const query = searchQuery.trim();
-        if (query.length > 0 && query.toLowerCase() !== selectedAddress.toLowerCase()) {
+        if (query.length > 2 && query.toLowerCase() !== selectedAddress.toLowerCase()) {
             const timerId = setTimeout(async () => {
-                let combinedResults: any[] = [];
-
-                // 1. Search in local admin parking areas
-                if (allAdminParkingAreas.length > 0) {
-                    const lowerQ = query.toLowerCase();
-                    const matchedAreas = allAdminParkingAreas.filter((item: any) => {
-                        const name = (item.location || item.name || '').toLowerCase();
-                        const address = (item.address || '').toLowerCase();
-                        const code = (item.parking_area_code || item.code || '').toLowerCase();
-                        return name.includes(lowerQ) || address.includes(lowerQ) || code.includes(lowerQ);
-                    }).slice(0, 5); // Limit to 5 parking results
-
-                    if (matchedAreas.length > 0) {
-                        const parkingResults = matchedAreas.map((item: any) => ({
-                            place_id: `parking_${item.parking_area_id || item.id}`,
-                            description: `🅿️ ${item.location || item.name} (${item.address || 'Kolkata'})`,
-                            lat: parseFloat(item.latitude || item.lat),
-                            lng: parseFloat(item.longitude || item.lng),
-                            isParking: true,
-                        }));
-                        combinedResults = [...parkingResults];
-                    }
-                }
-
-                // 2. Fetch OSM Results if query > 2 chars
-                if (query.length > 2) {
-                    try {
-                        // Append 'Kolkata' to ensure results are restricted to the city
-                        const osmQuery = query.toLowerCase().includes('kolkata') ? query : `${query}, Kolkata`;
-                        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(osmQuery)}&format=json&countrycodes=in&limit=5`;
-                        const res = await fetch(url, {
-                            headers: {
-                                'User-Agent': 'sParking Citizen App / 1.0' // Required by OSM policies
-                            }
-                        });
-                        const json = await res.json();
-
-                        if (json && json.length > 0) {
-                            console.log('--- OSM SEARCH RESULTS ---', json.length);
-                            const osmResults = json.map((item: any) => ({
-                                place_id: item.place_id.toString(),
-                                description: item.display_name,
-                                lat: parseFloat(item.lat),
-                                lng: parseFloat(item.lon)
-                            }));
-                            combinedResults = [...combinedResults, ...osmResults].slice(0, 10);
+                try {
+                    // Append 'Kolkata' to ensure results are restricted to the city
+                    const query = searchQuery.toLowerCase().includes('kolkata') ? searchQuery : `${searchQuery}, Kolkata`;
+                    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&countrycodes=in&limit=5`;
+                    const res = await fetch(url, {
+                        headers: {
+                            'User-Agent': 'sParking Citizen App / 1.0' // Required by OSM policies
                         }
-                    } catch (error) {
-                        console.log('OSM API Error', error);
-                    }
-                }
+                    });
+                    const json = await res.json();
 
-                setSearchResults(combinedResults);
+                    if (json && json.length > 0) {
+                        console.log('--- OSM SEARCH RESULTS ---', json.length);
+                        // Map OSM results to our existing dropdown structure
+                        const mappedResults = json.map((item: any) => ({
+                            place_id: item.place_id.toString(),
+                            description: item.display_name,
+                            lat: parseFloat(item.lat),
+                            lng: parseFloat(item.lon)
+                        }));
+                        setSearchResults(mappedResults);
+                    } else {
+                        console.log('--- OSM NO RESULTS ---');
+                        setSearchResults([]);
+                    }
+                } catch (error) {
+                    console.log('OSM API Error', error);
+                    setSearchResults([]);
+                }
             }, 600);
             return () => clearTimeout(timerId);
         } else {
             setSearchResults([]);
         }
-    }, [searchQuery, selectedAddress, allAdminParkingAreas]);
+    }, [searchQuery, selectedAddress]);
 
     const handlePlaceSelect = async (placeId: string, description: string, lat?: number, lng?: number) => {
-        Keyboard.dismiss();
         setSearchQuery(description);
         setSelectedAddress(description.toLowerCase().trim());
         setSearchResults([]);
         setIsSearchingPlaces(true);
-        setShowLots(true);
-        setDisplayCount(10); // Reset list display count when searching
 
         if (lat && lng) {
             console.log('--- OSM SELECTED LOCATION ---');
@@ -585,12 +335,9 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
             setMapRegion({
                 latitude: lat,
                 longitude: lng,
-                latitudeDelta: 0.002 + (Math.random() * 0.0000001), // Close zoom with jitter to force re-render
-                longitudeDelta: 0.002,
-                zoom: 18.0
+                latitudeDelta: 0.05,
+                longitudeDelta: 0.05,
             } as any);
-
-            setTapMarker({ latitude: lat, longitude: lng, title: description });
 
             await fetchNearbyParking(lat, lng, true, activeCategory);
         } else {
@@ -603,18 +350,15 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
     const filteredLots = useMemo(() => {
         return parkingLots.filter(lot => {
             const sq = searchQuery.toLowerCase().trim();
-            const isLocationSelected = sq !== '' && sq === selectedAddress;
-
-            if (!isLocationSelected) {
-                const name = (lot.location || lot.name || '').toLowerCase();
-                const area = (lot.address || '').toLowerCase();
-                const code = (lot.parking_area_code || lot.code || '').toLowerCase();
-
-                const matchesSearch = sq === '' || name.includes(sq) || area.includes(sq) || code.includes(sq);
-                if (!matchesSearch) return false;
-            }
-
-            return true;
+            // If a location was selected from dropdown, show ALL nearby lots (API already filtered by location)
+            if (selectedAddress && sq === selectedAddress.toLowerCase().trim()) return true;
+            // If search bar is empty, show all
+            if (sq === '') return true;
+            // Otherwise filter by name/address/code
+            const name = (lot.location || lot.name || '').toLowerCase();
+            const area = (lot.address || '').toLowerCase();
+            const code = (lot.parking_area_code || lot.code || '').toLowerCase();
+            return name.includes(sq) || area.includes(sq) || code.includes(sq);
         });
     }, [parkingLots, searchQuery, selectedAddress]);
 
@@ -624,17 +368,22 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
 
         setSelectedLotId(id);
 
-        const lotIndex = filteredLots.findIndex(
-            l => String(l.parking_area_id || l.id) === id
+        // Search in filteredLots first, then fallback to full parkingLots
+        let lot = filteredLots.find(
+            l => String(l.parking_area_id || l.id) === String(id)
         );
+        if (!lot) {
+            lot = parkingLots.find(
+                l => String(l.parking_area_id || l.id) === String(id)
+            );
+        }
 
-        if (lotIndex < 0) {
-            console.log(`❌ [HomeScreen] Could not find lot with ID ${id} in filteredLots!`);
+        if (!lot) {
+            console.log(`❌ [HomeScreen] Could not find lot with ID ${id}`);
             return;
         }
 
-        const lot = filteredLots[lotIndex];
-        console.log(`📋 [HomeScreen] Selected Lot Data (from list):`, JSON.stringify(lot, null, 2));
+        console.log(`📋 [HomeScreen] Selected Lot:`, lot.location || lot.name);
 
         // Smooth map camera focus
         const rawLat = lot.latitude ?? lot.lat;
@@ -642,24 +391,32 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
         const lat = parseFloat(String(rawLat));
         const lng = parseFloat(String(rawLng));
         if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-            // Camera movement is now handled 100% natively in Java (NativeMultiMapManager)
-            // on the exact moment the marker is tapped. This guarantees it never gets dropped!
-            console.log(`[MAP CLICK] Natively moving camera to Lat: ${lat}, Lng: ${lng}`);
+            const offsetLat = lat - 0.0035;
+            setMapRegion({
+                latitude: offsetLat,
+                longitude: lng,
+                latitudeDelta: 0.012 + Math.random() * 0.000001,
+                longitudeDelta: 0.012,
+                zoom: 14.5
+            } as any);
         }
 
-        // Fetch details & open popup sheet above bottom tabs
+        // ✅ Fetch details using getCitizenParkingAreaDetails API
         setIsFetchingDetails(true);
-        const lotIdNum = parseInt(lot.parking_area_id || lot.id, 10);
-        let finalDetails = lot;
+        const lotIdNum = parseInt(String(lot.parking_area_id || lot.id), 10);
         if (!isNaN(lotIdNum)) {
-            const details = await citizenService.getCitizenParkingAreaDetails(lotIdNum, null);
-            finalDetails = details || lot;
-            setSelectedParkingForModal(finalDetails);
+            try {
+                const details = await citizenService.getCitizenParkingAreaDetails(lotIdNum, null);
+                setSelectedParkingForModal(details || lot);
+            } catch (e) {
+                setSelectedParkingForModal(lot);
+            }
         } else {
             setSelectedParkingForModal(lot);
         }
         setIsFetchingDetails(false);
     };
+
 
     const floatAnim = useRef(new Animated.Value(0)).current;
 
@@ -673,7 +430,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
     }, []);
 
     const scrollToTop = () => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     };
 
     const handleGoToDetails = async (lot: any) => {
@@ -776,107 +533,20 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
         }
     };
 
-    const renderMapContent = () => (
-        <>
-            <NativeMultiMap
-                style={{ width: '100%', height: '100%' }}
-                region={mapRegion}
-                onMarkerPress={(e: any) => handleSelectMapPin(e.nativeEvent.id)}
-                onMapPress={handleMapPress}
-                markers={[
-                    ...filteredLots.map((lot, index) => {
-                        const rawLat = lot.latitude ?? lot.lat;
-                        const rawLng = lot.longitude ?? lot.lng;
-                        const lat = parseFloat(String(rawLat));
-                        const lng = parseFloat(String(rawLng));
-                        if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return null;
-                        const id = String(lot.parking_area_id || lot.id || `pin_${index}`);
-                        return {
-                            id,
-                            latitude: lat,
-                            longitude: lng,
-                            title: lot.location || lot.name || 'Parking Slot',
-                            color: selectedLotId === id ? 'blue' : 'red'
-                        };
-                    }).filter(Boolean),
-                    // Tap marker: shows instantly where user tapped on map
-                    tapMarker ? {
-                        id: '__tap_marker__',
-                        latitude: tapMarker.latitude,
-                        longitude: tapMarker.longitude,
-                        title: tapMarker.title || 'Selected Location',
-                        color: 'blue'
-                    } : null
-                ].filter(Boolean)}
-            />
-            {/* Custom Overlay Controls */}
-            <View style={{ position: 'absolute', top: isMapFullScreen ? Math.max(insets.top, 16) : 16, right: 16, zIndex: 100000, gap: 12 }}>
-                {/* Full Screen Toggle Button */}
-                <Pressable
-                    style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 }}
-                    onPress={() => {
-                        const nextState = !isMapFullScreen;
-                        setIsMapFullScreen(nextState);
-                        if (nextState) {
-                            if (filteredLots.length > 0) {
-                                // Move camera towards the P icon side
-                                const lot = filteredLots[0];
-                                const rawLat = lot.latitude ?? lot.lat;
-                                const rawLng = lot.longitude ?? lot.lng;
-                                const pLat = parseFloat(String(rawLat));
-                                const pLng = parseFloat(String(rawLng));
-                                if (!isNaN(pLat) && !isNaN(pLng)) {
-                                    setMapRegion({
-                                        latitude: pLat,
-                                        longitude: pLng,
-                                        latitudeDelta: 0.02 + (Math.random() * 0.0000001), // close zoom, jittered
-                                        longitudeDelta: 0.02,
-                                        zoom: 14.5
-                                    } as any);
-                                }
-                            } else if (cachedMapRegion) {
-                                setMapRegion({
-                                    ...cachedMapRegion,
-                                    latitudeDelta: cachedMapRegion.latitudeDelta + (Math.random() * 0.0000001)
-                                });
-                                fetchFreshUserLocation();
-                            }
-                        }
-                    }}
-                >
-                    <Text style={{ fontSize: 22, color: '#334155', fontWeight: 'bold' }}>{isMapFullScreen ? '✖' : '⛶'}</Text>
-                </Pressable>
-
-                {/* My Location Button */}
-                <Pressable
-                    style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 }}
-                    onPress={() => {
-                        if (cachedMapRegion) {
-                            setMapRegion({
-                                ...cachedMapRegion,
-                                latitudeDelta: cachedMapRegion.latitudeDelta + (Math.random() * 0.0000001)
-                            });
-                        }
-                        fetchFreshUserLocation();
-                    }}
-                >
-                    <Text style={{ fontSize: 18, color: '#334155', fontWeight: 'bold' }}>📍</Text>
-                </Pressable>
-            </View>
-        </>
-    );
-
     return (
         <View style={s.container}>
-            <StatusBar hidden={isMapFullScreen} barStyle="light-content" backgroundColor={colors.primary} />
+            <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
             <CarLoader
-                visible={isBooking || isSearchingPlaces || !mapRegion || isTabSwitching || isFetchingMapClick}
-                message={isTabSwitching ? "Re-Loading Map..." : (!mapRegion ? "Loading Map..." : (isSearchingPlaces ? "Searching Locations..." : (isFetchingMapClick ? "Finding Nearby Parking..." : "Processing Booking...")))}
+                visible={isBooking || isSearchingPlaces}
+                message={isSearchingPlaces ? "Searching Locations..." : "Processing Booking..."}
             />
 
             <ScrollView
-                ref={scrollViewRef}
-                scrollEnabled={true}
+                ref={flatListRef as any}
+                scrollEnabled={mapScrollEnabled} // ✅ Automatically locks when touching map
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+                }
                 style={s.scroll}
                 contentContainerStyle={[
                     s.scrollContent,
@@ -913,24 +583,39 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                         <View style={s.brandGroup}>
                             <View style={s.logoCircle}>
                                 <Image
-                                    source={require('../../assets/SmartParkingLogo.png')}
+                                    source={require('../../assets/splash_badge_saffron.png')}
                                     style={s.logoImage}
                                     resizeMode="contain"
                                 />
                             </View>
                             <View>
                                 <View style={s.brandNameRow}>
-                                    <Text style={s.brandTitle}>Smart Parking</Text>
+                                    <Text style={s.brandTitle}>S-Parking</Text>
+                                    <View style={s.govBadge}>
+                                        <Text style={s.govBadgeText}>KMC</Text>
+                                    </View>
                                 </View>
                             </View>
                         </View>
 
-
+                        <Pressable
+                            onPress={() => setShowNotifModal(true)}
+                            style={({ pressed }) => [s.bellWrapper, pressed && s.bellWrapperPressed]}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                            <Image
+                                source={require('../../assets/icons/icon_bell.png')}
+                                style={s.bellIcon}
+                                resizeMode="contain"
+                            />
+                            <View style={s.badge}>
+                                <Text style={s.badgeText}>3</Text>
+                            </View>
+                        </Pressable>
                     </View>
 
                     <View style={s.greetingWrap}>
                         <Text style={s.greetingTitle}>
-                            Welcome, {citizenProfile?.full_name || userSession?.user_name || 'Citizen'}
+                            Welcome, {userSession?.user_name || (userSession?.mobile_no ? `Citizen (${userSession.mobile_no})` : 'Citizen')} 👋
                         </Text>
 
                     </View>
@@ -968,7 +653,6 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                                     setSearchQuery('');
                                     setSearchResults([]);
                                     setSelectedAddress('');
-                                    setShowLots(true);
 
                                     // Refetch using user's current GPS location if available
                                     const userLoc = citizenService.getUserLocation();
@@ -1001,8 +685,43 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                             </Pressable>
                         )}
 
+                        <View style={s.searchDivider} />
 
+                        <Pressable
+                            onPress={() => Alert.alert('Filters', 'Distance, Price, EV, Accessible filters')}
+                            style={({ pressed }) => [s.searchFilterBtn, pressed && s.searchFilterBtnPressed]}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Image
+                                source={require('../../assets/icons/icon_filter.png')}
+                                style={s.searchFilterImg}
+                                resizeMode="contain"
+                            />
+                        </Pressable>
                     </View>
+
+                    {/* Search Results Dropdown */}
+                    {searchResults.length > 0 && (
+                        <View style={[s.searchResultsDropdown, { top: 64 }]}>
+                            <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 200 }}>
+                                {searchResults.map((item) => (
+                                    <Pressable
+                                        key={item.place_id}
+                                        style={s.searchResultItem}
+                                        onPress={() => handlePlaceSelect(item.place_id, item.description, item.lat, item.lng)}
+                                    >
+                                        <Image
+                                            source={require('../../assets/icons/nav_parking.png')}
+                                            style={s.searchResultIcon}
+                                            resizeMode="contain"
+                                        />
+                                        <Text style={s.searchResultText} numberOfLines={2}>
+                                            {item.description}
+                                        </Text>
+                                    </Pressable>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    )}
                 </View>
 
                 {/* ================= 2. MAIN PARKING CONTENT ================= */}
@@ -1053,33 +772,77 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                     <View style={s.viewToggleRow}>
                         <View style={s.sectionHeaderCol}>
                             <View style={s.sectionTitleRow}>
-                                <Text style={s.sectionHeaderTitle}>{filteredLots.length} Available Parking{filteredLots.length !== 1 ? 's' : ''}</Text>
+                                <Text style={s.sectionHeaderTitle}>Verified Smart Slots</Text>
                                 <View style={s.liveSlotsBadge}>
                                     <View style={s.liveSlotsDot} />
                                     <Text style={s.liveSlotsBadgeText}>LIVE</Text>
                                 </View>
+                            </View>
+                            <View style={s.sectionSubRow}>
+                                <Image
+                                    source={require('../../assets/icons/booking_history_location_pin.png')}
+                                    style={s.subPinIcon}
+                                    resizeMode="contain"
+                                />
+                                <Text style={s.sectionHeaderSub}>
+                                    <Text style={s.countBoldHighlight}>{filteredLots.length}</Text> active locations around you
+                                </Text>
                             </View>
                         </View>
                     </View>
 
                     {/* Interactive Radar Map View */}
                     <View style={s.mapWrapper}>
+                        <View style={s.mapLiveHeader}>
+                            <View style={s.mapLiveBadge}>
+                                <View style={s.mapLiveDot} />
+                                <Text style={s.mapLiveText}>Live GPS Radar</Text>
+                            </View>
+                            <Text style={s.mapLiveCount}>{filteredLots.length} Pins</Text>
+                        </View>
 
-                        {/* When touching inside Map, ONLY Map moves! Scroll with single finger */}
+                        {/* ✅ FIXED GESTURES: When touching inside Map, ONLY Map moves! */}
                         {mapRegion ? (
                             <View
-                                style={{ width: '100%', borderRadius: 16, overflow: 'hidden', height: 580 }}
-                                onTouchStart={() => {
-                                    scrollViewRef.current?.setNativeProps({ scrollEnabled: false });
-                                }}
-                                onTouchEnd={() => {
-                                    scrollViewRef.current?.setNativeProps({ scrollEnabled: true });
-                                }}
-                                onTouchCancel={() => {
-                                    scrollViewRef.current?.setNativeProps({ scrollEnabled: true });
-                                }}
+                                style={{ width: '100%', height: 580, borderRadius: 16, overflow: 'hidden' }}
+                                pointerEvents="box-none"
+                                onTouchStart={() => setMapScrollEnabled(false)}
+                                onTouchEnd={() => setMapScrollEnabled(true)}
+                                onTouchCancel={() => setMapScrollEnabled(true)}
                             >
-                                {!isMapFullScreen && renderMapContent()}
+                                <NativeMultiMap
+                                    style={{ width: '100%', height: '100%' }}
+                                    region={mapRegion}
+                                    onMarkerPress={(e: any) => handleSelectMapPin(e.nativeEvent.id)}
+                                    onMapPress={(e: any) => {
+                                        const lat = e.nativeEvent.latitude;
+                                        const lng = e.nativeEvent.longitude;
+                                        if (lat && lng) {
+                                            setMapRegion({
+                                                latitude: lat,
+                                                longitude: lng,
+                                                latitudeDelta: 0.0922,
+                                                longitudeDelta: 0.0421,
+                                            } as any);
+                                            fetchNearbyParking(lat, lng, true, activeCategory);
+                                        }
+                                    }}
+                                    markers={markersReady ? filteredLots.map((lot, index) => {
+                                        const rawLat = lot.latitude ?? lot.lat;
+                                        const rawLng = lot.longitude ?? lot.lng;
+                                        const lat = parseFloat(String(rawLat));
+                                        const lng = parseFloat(String(rawLng));
+                                        if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return null;
+                                        const id = String(lot.parking_area_id || lot.id || `pin_${index}`);
+                                        return {
+                                            id,
+                                            latitude: lat,
+                                            longitude: lng,
+                                            title: lot.location || lot.name || 'Parking Slot',
+                                            color: selectedLotId === id ? 'blue' : 'red'
+                                        };
+                                    }).filter(Boolean) : []}
+                                />
                             </View>
                         ) : (
                             <View style={{ width: '100%', height: 580, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}>
@@ -1087,101 +850,164 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                             </View>
                         )}
                     </View>
-
-                    {/* Search Results Dropdown */}
-                    {searchResults.length > 0 && (
-                        <View style={s.searchResultsDropdown}>
-                            <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled={true} style={{ maxHeight: 350 }}>
-                                {searchResults.map((item, index) => (
-                                    <Pressable
-                                        key={item.place_id}
-                                        style={({ pressed }) => [
-                                            s.searchResultItem,
-                                            pressed && { backgroundColor: '#F8FAFC' },
-                                            index === searchResults.length - 1 && { borderBottomWidth: 0 }
-                                        ]}
-                                        onPress={() => handlePlaceSelect(item.place_id, item.description, item.lat, item.lng)}
-                                    >
-                                        <View style={{
-                                            width: 32, height: 32, borderRadius: 16, backgroundColor: item.isParking ? '#EFF6FF' : '#F1F5F9',
-                                            alignItems: 'center', justifyContent: 'center', marginRight: 12
-                                        }}>
-                                            <Image
-                                                source={require('../../assets/icons/nav_parking.png')}
-                                                style={[s.searchResultIcon, { marginRight: 0, width: 16, height: 16, tintColor: item.isParking ? '#3B82F6' : '#64748B' }]}
-                                                resizeMode="contain"
-                                            />
-                                        </View>
-                                        <Text style={s.searchResultText} numberOfLines={2}>
-                                            {item.description}
-                                        </Text>
-                                    </Pressable>
-                                ))}
-                            </ScrollView>
-                        </View>
-                    )}
                 </View>
 
+                {/* List View Rendering */}
+                {viewMode === 'list' && filteredLots.map((lot, lotIdx) => {
+                    const id = String(lot.parking_area_id || lot.id || `lot_${lotIdx}`);
+                    const isSelected = id === selectedLotId;
 
-                {/* List View Restored per user request, only visible when showLots is true */}
-                {showLots && filteredLots.length > 0 && (
-                    <View style={{ paddingHorizontal: 16, marginTop: 16, paddingBottom: 16 }}>
-                        <View style={s.sectionTitleRow}>
-                            <Text style={s.sectionHeaderTitle}>Parking Areas List</Text>
-                        </View>
-                        {filteredLots.slice(0, displayCount).map((lot, idx) => {
-                            const name = lot.location || lot.name || 'Parking Area';
-                            const address = lot.address || 'Kolkata';
-                            const distance = lot.distance_km ? `${lot.distance_km.toFixed(1)} km away` : 'Near you';
+                    const totalSlots = lot.capacity?.four_wheeler || lot.totalSlots || 200;
+                    const availSlots = lot.free_physical_slot_count ?? (lot.capacity?.four_wheeler || lot.availableSlots || 0);
+                    const freePercent = totalSlots > 0 ? Math.min(100, Math.max(0, Math.round((availSlots / totalSlots) * 100))) : 0;
 
-                            const fwFree = lot.physical_slots?.four_wheeler?.free ?? lot.capacity?.four_wheeler ?? 0;
-                            const twFree = lot.physical_slots?.two_wheeler?.free ?? lot.capacity?.two_wheeler ?? 0;
+                    const name = lot.location || lot.name || 'Parking Slot';
+                    const area = lot.address || 'Kolkata Grid';
+                    const distance = lot.distance_km ? `${lot.distance_km.toFixed(1)} km` : '1.2 km';
+                    const rate = lot.rates?.four_wheeler ? `₹${lot.rates.four_wheeler}` : (lot.rate4W || '₹20');
 
-                            return (
-                                <Pressable
-                                    key={String(lot.parking_area_id || lot.id || idx)}
-                                    style={{
-                                        backgroundColor: '#FFFFFF',
-                                        borderRadius: 16,
-                                        padding: 16,
-                                        marginTop: 12,
-                                        borderWidth: 1,
-                                        borderColor: '#F1F5F9',
-                                        elevation: 2,
-                                        shadowColor: '#000',
-                                        shadowOffset: { width: 0, height: 2 },
-                                        shadowOpacity: 0.05,
-                                        shadowRadius: 4
-                                    }}
-                                    onPress={() => handleSelectMapPin(String(lot.parking_area_id || lot.id))}
-                                >
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <View style={{ flex: 1, paddingRight: 10 }}>
-                                            <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', marginBottom: 4 }}>{name}</Text>
-                                            <Text style={{ fontSize: 13, color: '#64748B', marginBottom: 6 }}>{address}</Text>
-                                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#10B981' }}>{distance}</Text>
+                    return (
+                        <View style={s.cardWrapper}>
+                            <Pressable
+                                onPress={() => handleSelectMapPin(id)}
+                                style={[s.compactCard, isSelected && s.compactCardSelected]}>
+
+                                <View style={s.cardTopBar}>
+                                    <View style={s.verifiedRow}>
+                                        <Image
+                                            source={require('../../assets/icons/icon_shield_check.png')}
+                                            style={s.shieldMiniIcon}
+                                            resizeMode="contain"
+                                        />
+                                        <Text style={s.verifiedTagText}>KMC VERIFIED</Text>
+                                    </View>
+
+                                    <View style={s.themeSlotsPill}>
+                                        <View style={s.themeDot} />
+                                        <Text style={s.themeSlotsText}>
+                                            {availSlots} / {totalSlots} FREE
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <View style={s.cardCenterRow}>
+                                    <Pressable onPress={() => handleGoToDetails(lot)}>
+                                        {lot.image ? (
+                                            <Image source={lot.image} style={s.compactThumb} resizeMode="cover" />
+                                        ) : (
+                                            <View style={s.compactThumbFallback}>
+                                                <Image
+                                                    source={require('../../assets/icons/nav_parking.png')}
+                                                    style={s.thumbFallbackIcon}
+                                                    resizeMode="contain"
+                                                />
+                                            </View>
+                                        )}
+                                    </Pressable>
+
+                                    <View style={s.centerMetaCol}>
+                                        <Text style={s.lotNameText} numberOfLines={1}>{name}</Text>
+
+                                        <View style={s.addressRow}>
+                                            <Image
+                                                source={require('../../assets/icons/booking_history_location_pin.png')}
+                                                style={s.pinIcon}
+                                                resizeMode="contain"
+                                            />
+                                            <Text style={s.addressText} numberOfLines={1}>{area}</Text>
                                         </View>
 
-                                        <View style={{ flexDirection: 'row', gap: 6 }}>
-                                            {fwFree >= 0 && (
-                                                <View style={{ backgroundColor: '#F8FAFC', borderRadius: 8, padding: 6, minWidth: 45, alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' }}>
-                                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B' }}>4W</Text>
-                                                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B', marginVertical: 2 }}>{fwFree}</Text>
-                                                </View>
-                                            )}
-                                            {twFree >= 0 && (
-                                                <View style={{ backgroundColor: '#EFF6FF', borderRadius: 8, padding: 6, minWidth: 45, alignItems: 'center', borderWidth: 1, borderColor: '#DBEAFE' }}>
-                                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#3B82F6' }}>2W</Text>
-                                                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#2563EB', marginVertical: 2 }}>{twFree}</Text>
-                                                </View>
-                                            )}
+                                        <View style={s.progressRow}>
+                                            <View style={s.progressTrack}>
+                                                <View
+                                                    style={[
+                                                        s.progressFill,
+                                                        { width: `${Math.max(freePercent, 6)}%` }
+                                                    ]}
+                                                />
+                                            </View>
+                                            <Text style={s.progressRatioText}>
+                                                {freePercent}% Avail
+                                            </Text>
                                         </View>
                                     </View>
-                                </Pressable>
-                            );
-                        })}
+
+                                    <View style={s.rateContainer}>
+                                        <Text style={s.rateValueText}>{rate}</Text>
+                                        <Text style={s.rateUnitText}>/hr</Text>
+                                        <View style={s.distSubBadge}>
+                                            <Text style={s.distSubText}>{distance}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                <View style={s.cardBottomRow}>
+                                    <View style={s.tagGroup}>
+                                        <View style={s.infoTag}>
+                                            <Image
+                                                source={require('../../assets/icons/icon_car.png')}
+                                                style={s.tagMicroIcon}
+                                                resizeMode="contain"
+                                            />
+                                            <Text style={s.tagText}>4W Slot</Text>
+                                        </View>
+                                        {lot.valet_available && (
+                                            <View style={[s.infoTag, s.valetTag]}>
+                                                <Text style={s.valetTagText}>Valet</Text>
+                                            </View>
+                                        )}
+                                    </View>
+
+                                    <View style={s.actionBtnGroup}>
+                                        <Pressable
+                                            onPress={() => handleOpenDirections(lot)}
+                                            style={({ pressed }) => [s.navBtn, pressed && s.navBtnPressed]}>
+                                            <View style={s.navIconCircle}>
+                                                <Image
+                                                    source={require('../../assets/icons/booking_history_location_pin.png')}
+                                                    style={s.navIconStyle}
+                                                    resizeMode="contain"
+                                                />
+                                            </View>
+                                            <Text style={s.navBtnText}>Directions</Text>
+                                        </Pressable>
+
+                                        <Pressable
+                                            onPress={() => handleBookPress(lot)}
+                                            style={({ pressed }) => [
+                                                s.bookBtn,
+                                                pressed && s.bookBtnPressed,
+                                                lot.advance_booking?.enabled === false && s.bookBtnDisabled
+                                            ]}>
+                                            <Text style={s.bookBtnText}>Book Slot</Text>
+                                            <Image
+                                                source={require('../../assets/icons/icon_chevron.png')}
+                                                style={[s.chevronIcon, { tintColor: '#FFFFFF', marginLeft: 3 }]}
+                                                resizeMode="contain"
+                                            />
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            </Pressable>
+                        </View>
+                    );
+                })}
+
+                <View style={{ paddingBottom: 20, paddingHorizontal: 16 }}>
+                    <View style={[s.footerTrustNotice, { marginTop: 16, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 16, elevation: 2, borderWidth: 1, borderColor: '#F1F5F9' }]}>
+                        <View style={s.trustBadgeRow}>
+                            <Image
+                                source={require('../../assets/icons/icon_shield_check.png')}
+                                style={[s.footerShieldIcon, { tintColor: '#16A34A', width: 20, height: 20 }]}
+                                resizeMode="contain"
+                            />
+                            <Text style={[s.footerTrustText, { fontSize: 13, fontWeight: '700', color: '#334155' }]}>
+                                Official Smart Slot Network{'\n'}
+                                <Text style={{ fontSize: 11, fontWeight: '500', color: '#64748B' }}>Kolkata Municipal Corporation</Text>
+                            </Text>
+                        </View>
                     </View>
-                )}
+                </View>
             </ScrollView>
 
             {/* Scroll to Top */}
@@ -1199,7 +1025,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                     <View style={s.modalCard}>
                         <View style={s.modalHandle} />
                         <View style={s.notifHeaderRow}>
-                            <Text style={s.notifModalTitle}>Notifications</Text>
+                            <Text style={s.modalTitle}>Notifications</Text>
                             <Pressable
                                 onPress={() => setShowNotifModal(false)}
                                 style={s.notifModalCloseBtn}
@@ -1225,7 +1051,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={s.notifItemTitle}>Vehicle WB02AK1234 Verified</Text>
-                                <Text style={s.notifItemDesc}>Digital RC verification completed with smart slot.</Text>
+                                <Text style={s.notifItemDesc}>Digital RC verification completed with Kolkata FASTag slot.</Text>
                                 <Text style={s.notifItemTime}>2 hours ago</Text>
                             </View>
                         </View>
@@ -1261,7 +1087,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
 
                         <Text style={s.promptTitle}>Profile {profileCompletionPercent}% Complete</Text>
                         <Text style={s.promptDesc}>
-                            Complete your Citizen Profile to activate automatic barrier deduction and digital parking receipts.
+                            Complete your Citizen Profile to activate automatic FASTag barrier deduction and digital parking receipts.
                         </Text>
 
                         <View style={s.promptProgressWrap}>
@@ -1345,7 +1171,14 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
 
                         {/* Top Ribbon */}
                         <View style={s.sheetRibbonRow}>
-
+                            <View style={s.sheetCivicTag}>
+                                <Image
+                                    source={require('../../assets/icons/icon_shield_check.png')}
+                                    style={s.sheetShieldIcon}
+                                    resizeMode="contain"
+                                />
+                                <Text style={s.sheetCivicTagText}>KMC VERIFIED SMART</Text>
+                            </View>
 
                             <Pressable
                                 onPress={() => setSelectedParkingForModal(null)}
@@ -1375,13 +1208,13 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                                             resizeMode="contain"
                                         />
                                         <Text style={s.sheetAddressText} numberOfLines={2}>
-                                            {selectedParkingForModal?.address || 'Kolkata'}
+                                            {selectedParkingForModal?.address || 'Kolkata Grid'}
                                         </Text>
                                     </View>
 
                                     <View style={s.sheetDistanceRow}>
                                         <Text style={s.sheetDistanceText}>
-                                            {selectedParkingForModal?.distance_km ? `${selectedParkingForModal.distance_km.toFixed(1)} km away` : ''}
+                                            📍 {selectedParkingForModal?.distance_km ? `${selectedParkingForModal.distance_km.toFixed(1)} km away` : 'Near you'} • 5 min
                                         </Text>
                                     </View>
                                 </View>
@@ -1391,21 +1224,19 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                                     const twFree = selectedParkingForModal?.physical_slots?.two_wheeler?.free ?? selectedParkingForModal?.capacity?.two_wheeler ?? 0;
                                     return (
                                         <View style={{ flexDirection: 'row', gap: 6 }}>
-                                            {fwFree >= 0 && (
-                                                <View style={[s.sheetSlotsBox, { paddingHorizontal: 6, paddingVertical: 4, minWidth: 60 }]}>
-                                                    <View style={[s.sheetSlotsInner, { alignItems: 'center' }]}>
-                                                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B' }}>4W</Text>
-                                                        <Text style={[s.sheetSlotsCount, { fontSize: 14, marginVertical: 2 }]}>{fwFree}</Text>
-                                                        <Text style={[s.sheetSlotsSub, { fontSize: 8 }]}>AVAILABLE</Text>
+                                            {fwFree > 0 && (
+                                                <View style={[s.sheetSlotsBox, { paddingHorizontal: 6, paddingVertical: 4, minWidth: 50 }]}>
+                                                    <View style={s.sheetSlotsInner}>
+                                                        <Text style={[s.sheetSlotsCount, { fontSize: 14 }]}>{fwFree}</Text>
+                                                        <Text style={[s.sheetSlotsSub, { fontSize: 8 }]}>4W FREE</Text>
                                                     </View>
                                                 </View>
                                             )}
-                                            {twFree >= 0 && (
-                                                <View style={[s.sheetSlotsBox, { paddingHorizontal: 6, paddingVertical: 4, minWidth: 60, backgroundColor: '#EFF6FF' }]}>
-                                                    <View style={[s.sheetSlotsInner, { alignItems: 'center' }]}>
-                                                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#3B82F6' }}>2W</Text>
-                                                        <Text style={[s.sheetSlotsCount, { fontSize: 14, color: '#2563EB', marginVertical: 2 }]}>{twFree}</Text>
-                                                        <Text style={[s.sheetSlotsSub, { fontSize: 8, color: '#3B82F6' }]}>AVAILABLE</Text>
+                                            {twFree > 0 && (
+                                                <View style={[s.sheetSlotsBox, { paddingHorizontal: 6, paddingVertical: 4, minWidth: 50, backgroundColor: '#EFF6FF' }]}>
+                                                    <View style={s.sheetSlotsInner}>
+                                                        <Text style={[s.sheetSlotsCount, { fontSize: 14, color: '#2563EB' }]}>{twFree}</Text>
+                                                        <Text style={[s.sheetSlotsSub, { fontSize: 8, color: '#3B82F6' }]}>2W FREE</Text>
                                                     </View>
                                                 </View>
                                             )}
@@ -1455,14 +1286,14 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                             {selectedParkingForModal?.advance_booking?.enabled === false ? (
                                 <View style={s.bookingNoticeBarDisabled}>
                                     <Text style={s.bookingNoticeTextDisabled}>
-                                        ℹ️ Advance Booking: Unavailable
+                                        ℹ️ On-Spot Entry Only • Advance Booking is disabled for this parking
                                     </Text>
                                 </View>
                             ) : (
                                 <View style={s.bookingNoticeBarActive}>
                                     <View style={s.pulseGreenDot} />
                                     <Text style={s.bookingNoticeTextActive}>
-                                        Advance Booking: Available
+                                        1-Tap Fastag barrier clearance active for this parking
                                     </Text>
                                 </View>
                             )}
@@ -1470,7 +1301,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                         </ScrollView>
 
                         {/* Directions & Book Slot Buttons (MOVED OUTSIDE SCROLLVIEW TO STAY VISIBLE) */}
-                        <View style={[s.sheetActionsRow, { paddingBottom: 48, paddingTop: 8, backgroundColor: '#FFFFFF' }]}>
+                        <View style={[s.sheetActionsRow, { paddingBottom: 16, paddingTop: 8, backgroundColor: '#FFFFFF' }]}>
                             <Pressable
                                 onPress={() => {
                                     const lot = selectedParkingForModal;
@@ -1511,7 +1342,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                                     selectedParkingForModal?.advance_booking?.enabled === false && s.sheetBookBtnDisabled,
                                 ]}>
                                 <Text style={s.sheetBookBtnText}>
-                                    {selectedParkingForModal?.advance_booking?.enabled === false ? 'Booking Unavailable' : 'Book Slot'}
+                                    {selectedParkingForModal?.advance_booking?.enabled === false ? 'Booking Closed' : 'Book Slot'}
                                 </Text>
                                 {selectedParkingForModal?.advance_booking?.enabled !== false && (
                                     <Image
@@ -1562,33 +1393,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                 </View>
             </Modal>
 
-            <Modal visible={!!mapPopup?.visible} transparent animationType="fade" onRequestClose={() => setMapPopup(null)}>
-                <View style={s.modalBackdrop}>
-                    <View style={s.modalBox}>
-                        <View style={[s.modalIconCircle, { backgroundColor: mapPopup?.isError ? '#FEE2E2' : '#DCFCE7' }]}>
-                            <Text style={s.modalIconEmoji}>{mapPopup?.isError ? '🚫' : '✅'}</Text>
-                        </View>
-                        <Text style={s.modalTitle}>{mapPopup?.title}</Text>
-                        <Text style={s.modalMessage}>
-                            {mapPopup?.message}
-                        </Text>
-                        <Pressable
-                            onPress={() => setMapPopup(null)}
-                            style={s.modalCloseBtn}>
-                            <Text style={s.modalCloseBtnText}>Okay</Text>
-                        </Pressable>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* FULL SCREEN MAP MODAL */}
-            <Modal visible={isMapFullScreen} animationType="fade" transparent={false} onRequestClose={() => setIsMapFullScreen(false)}>
-                <View style={{ flex: 1, backgroundColor: '#F1F5F9' }}>
-                    {renderMapContent()}
-                </View>
-            </Modal>
-
-            <CarLoader visible={isFetchingDetails} message="Loading slot details..." />
+            <CarLoader visible={isFetchingDetails} message="Fetching slot details..." />
         </View>
     );
 }
@@ -1900,13 +1705,13 @@ const s = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderRadius: 16,
         shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
-        elevation: 16, // stronger shadow for popup
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 12, // stronger shadow for popup
         borderWidth: 1,
         borderColor: '#E2E8F0',
-        zIndex: 9999, // very high zIndex to cover map
+        zIndex: 999, // very high zIndex to cover map
         overflow: 'hidden',
     },
     searchResultItem: {
@@ -2512,7 +2317,7 @@ const s = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 14,
     },
-    notifModalTitle: {
+    modalTitle: {
         fontSize: 18,
         fontWeight: '900',
         color: '#0F172A',

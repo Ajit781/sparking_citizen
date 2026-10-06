@@ -628,18 +628,45 @@ class CitizenService {
     }
 
     /**
-     * Fetch all parking areas (for search hints) using citizen endpoint instead of admin endpoint
-     * to avoid "Unsupported admin role" errors.
+     * Fetch all parking areas (for search hints).
+     * Uses citizen endpoint to avoid 'AUTH_003 Unsupported admin role' error for citizen logins.
      */
     public async getAdminParkingAreas(): Promise<any[]> {
-        console.log(`📡 [CitizenService] Fetching all parking areas for search hints using citizen nearby API with large radius...`);
+        console.log(`📡 [CitizenService] Fetching parking areas for search hints...`);
         try {
-            // Using a central coordinate in Kolkata with a very large radius to get all parking areas
-            return await this.getCitizenNearbyParkingAreas(22.5726, 88.3639, 1000, null);
+            const areas = await this.getCitizenNearbyParkingAreas(22.5726, 88.3639, 1000, null);
+            if (areas && areas.length > 0) {
+                console.log(`✅ [CitizenService] Loaded ${areas.length} parking areas for search suggestions`);
+                return areas;
+            }
         } catch (error: any) {
-            console.error('❌ [CitizenService] Failed to fetch parking areas for search hints:', error?.message || error);
-            return [];
+            console.warn('⚠️ [CitizenService] getCitizenNearbyParkingAreas failed:', error?.message || error);
         }
+
+        try {
+            const session = await storageService.getUserSession();
+            const payload = {
+                enc_data: JSON.stringify({
+                    login_user_id: session?.login_user_id || 0,
+                    offset: 0,
+                    limit: 100,
+                }),
+            };
+            const response = await apiClient.post(API_CONFIG.ENDPOINTS.GET_ADMIN_PARKING_AREAS, payload);
+            if (response && (response.status === 'GEN_000' || response.status === true || response.status === 'success')) {
+                let data = response.data;
+                if (typeof data === 'string') {
+                    try { data = JSON.parse(data); } catch (e) {}
+                }
+                if (Array.isArray(data)) return data;
+                if (data && Array.isArray(data.parking_areas)) return data.parking_areas;
+                return Array.isArray(data) ? data : [];
+            }
+        } catch (error: any) {
+            // Admin role not supported for normal citizen users
+        }
+
+        return [];
     }
 
 
