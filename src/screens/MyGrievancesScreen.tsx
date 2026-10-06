@@ -27,8 +27,12 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
   const fetchGrievances = async () => {
+    console.log('[MyGrievancesScreen] fetchGrievances triggered!');
     try {
       const result = await citizenService.getCitizenGrievancesByLogin();
+      
+      console.log('--- RAW GRIEVANCE API RESPONSE ---', JSON.stringify(result, null, 2));
+
       let list = [];
       if (Array.isArray(result)) {
         list = result;
@@ -187,16 +191,7 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
                 </View>
               ) : null}
 
-              {locationAddr ? (
-                <View style={s.infoRow}>
-                  <Image
-                    source={require('../../assets/icons/booking_history_location_pin.png')}
-                    style={s.infoIconImg}
-                    resizeMode="contain"
-                  />
-                  <Text style={s.infoText} numberOfLines={1}>{locationAddr}</Text>
-                </View>
-              ) : null}
+              {/* Location Address / LatLong has been removed per request */}
 
               {landmark ? (
                 <View style={s.infoRow}>
@@ -205,7 +200,7 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
                     style={[s.infoIconImg, { tintColor: colors.primary }]}
                     resizeMode="contain"
                   />
-                  <Text style={s.infoText} numberOfLines={1}>Near {landmark}</Text>
+                  <Text style={s.infoText} numberOfLines={1}>{landmark}</Text>
                 </View>
               ) : null}
             </View>
@@ -339,7 +334,7 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
           renderItem={renderItem}
           contentContainerStyle={[
             s.listContent,
-            { paddingBottom: 30 + Math.max(insets.bottom, 16) },
+            { paddingBottom: 100 + Math.max(insets.bottom, 16) },
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -488,9 +483,9 @@ const s = StyleSheet.create({
   /* Card */
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 16,
+    borderRadius: 14,
+    padding: 10,
+    marginBottom: 10,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -503,8 +498,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    paddingBottom: 10,
+    marginBottom: 6,
+    paddingBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#F8FAFC',
   },
@@ -515,7 +510,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingVertical: 3,
     borderRadius: 8,
     gap: 6,
   },
@@ -554,17 +549,17 @@ const s = StyleSheet.create({
   contentRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 6,
   },
   textColumn: {
     flex: 1,
     marginRight: 12,
   },
   title: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
     color: '#0F172A',
-    marginBottom: 8,
+    marginBottom: 4,
     lineHeight: 22,
     letterSpacing: 0.2,
   },
@@ -576,7 +571,7 @@ const s = StyleSheet.create({
     borderLeftColor: colors.primary,
     borderWidth: 1,
     borderColor: '#F1F5F9',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   description: {
     fontSize: 12,

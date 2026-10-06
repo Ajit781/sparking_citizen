@@ -50,7 +50,7 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onPress }) => {
       onPress={onPress}
       style={styles.itemContainer}
       hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}>
-      
+
       <Animated.View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center', transform: [{ translateY: iconTranslateY }] }}>
         <Image
           source={icon}
@@ -81,7 +81,7 @@ export default function BottomNav({
   go: (s: ScreenName) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const bottomPadding = Math.max(insets.bottom, 12);
+  const bottomPadding = Math.max(insets.bottom * 0.9, 4);
 
   return (
     <View style={[styles.fullWidthContainer, { paddingBottom: bottomPadding }]}>
@@ -136,8 +136,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingTop: 14,
-    paddingBottom: 6,
+    paddingTop: 2,
+    paddingBottom: 0,
   },
   itemContainer: {
     flex: 1,
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   icon: {
     width: 24,
     height: 24,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   activeDot: {
     position: 'absolute',

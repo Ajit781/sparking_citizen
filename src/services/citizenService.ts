@@ -859,7 +859,7 @@ class CitizenService {
       enc_data: JSON.stringify(payloadData),
     };
 
-    console.log(`📋 [CitizenService] Fetching grievances for login_user_id: ${resolvedUserId}`);
+    console.log(`📋 [CitizenService] Fetching grievances for login_user_id: ${resolvedUserId}`, JSON.stringify(payloadData, null, 2));
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.GET_CITIZEN_GRIEVANCES, payload);

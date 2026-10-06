@@ -27,6 +27,7 @@ import CivicNavbar from '../components/CivicNavbar';
 import { getErrorMessage } from '../utils/errorUtils';
 import ErrorModal from '../components/ErrorModal';
 import VisionCamera from '../components/VisionCamera';
+import { NativeMultiMap } from './HomeScreen';
 
 interface PostGrievanceScreenProps {
   onBack: () => void;
@@ -75,6 +76,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
 
   useEffect(() => {
     loadMasterData();
+    handleUseCurrentLocation();
   }, []);
 
   const loadMasterData = async () => {
@@ -156,12 +158,21 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
             lat: newLat,
             lng: newLng,
           });
-          mapRef.current?.animateToRegion({
-            latitude: newLat,
-            longitude: newLng,
-            latitudeDelta: 0.006,
-            longitudeDelta: 0.006,
-          }, 800);
+          console.log(`[PostGrievance] Got GPS location: ${newLat}, ${newLng}`);
+          // Delay animation slightly to ensure map is ready
+          setTimeout(() => {
+            if (mapRef.current && mapRef.current.animateToRegion) {
+                console.log('[PostGrievance] Animating to region...');
+                try {
+                  mapRef.current.animateToRegion({
+                    latitude: newLat,
+                    longitude: newLng,
+                    latitudeDelta: 0.006,
+                    longitudeDelta: 0.006,
+                  }, 800);
+                } catch(e) {}
+            }
+          }, 500);
           setIsLocating(false);
           setAddressText(`${newLat.toFixed(5)}, ${newLng.toFixed(5)}`);
         },
@@ -403,7 +414,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
             <Text style={s.fieldLabel}>GEO-LOCATION TAG <Text style={s.requiredStar}>*</Text></Text>
 
             <View style={s.miniMapCard}>
-              <MapView
+              <NativeMultiMap
                 ref={mapRef}
                 style={s.miniMapImage}
                 region={{
@@ -412,10 +423,14 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
                   latitudeDelta: 0.006,
                   longitudeDelta: 0.006,
                 }}
-                scrollEnabled={false}
-                zoomEnabled={false}>
-                <Marker coordinate={{ latitude: locationCoords.lat, longitude: locationCoords.lng }} />
-              </MapView>
+                markers={[{
+                  id: '__tap_marker__',
+                  latitude: locationCoords.lat,
+                  longitude: locationCoords.lng,
+                  title: 'Selected Location',
+                  color: 'blue'
+                }]}
+              />
 
               {/* Floating 'Use Current Location' Button */}
               <Pressable
@@ -432,21 +447,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
               </Pressable>
             </View>
 
-            {/* Address Input Row */}
-            <View style={s.addressRow}>
-              <Image
-                source={require('../../assets/icons/booking_history_location_pin.png')}
-                style={s.addressPinImg}
-                resizeMode="contain"
-              />
-              <TextInput
-                style={s.addressTextInput}
-                value={addressText}
-                onChangeText={setAddressText}
-                placeholder="Enter street name, landmark, or ward number"
-                placeholderTextColor="#94A3B8"
-              />
-            </View>
+            {/* Address Input Row (Removed from UI per request, silently sent in API) */}
           </View>
 
           {/* Field 7: Additional Details */}
@@ -877,7 +878,7 @@ const s = StyleSheet.create({
 
   /* Mini Map */
   miniMapCard: {
-    height: 150,
+    height: 220,
     borderRadius: 14,
     overflow: 'hidden',
     position: 'relative',

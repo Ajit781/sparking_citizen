@@ -200,7 +200,7 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
 
           {/* Title with Executive Kerning */}
           <Text style={[styles.title, { color: primaryAccent }]}>
-            S-Parking
+            Smart Parking
           </Text>
           {/* Tagline */}
           <Text style={styles.subtitle}>

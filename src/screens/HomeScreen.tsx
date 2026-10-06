@@ -21,9 +21,10 @@ import {
     NativeModules,
     Keyboard,
     AppState,
+    PanResponder,
 } from 'react-native';
 
-const NativeMultiMap = requireNativeComponent('NativeMultiMap');
+export const NativeMultiMap = requireNativeComponent('NativeMultiMap');
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { ScreenName } from '../types/navigation';
@@ -170,6 +171,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                     cachedParkingLots = data;
                     lastFetchTime = Date.now();
                     setParkingLots(data);
+                    setShowLots(true);
                 } else {
                     cachedParkingLots = [];
                     lastFetchTime = Date.now();
@@ -618,6 +620,14 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
         });
     }, [parkingLots, searchQuery, selectedAddress]);
 
+    useEffect(() => {
+        if (filteredLots.length > 0) {
+            console.log('\n=== PARKING LIST DATA START ===');
+            console.log(JSON.stringify(filteredLots, null, 2));
+            console.log('=== PARKING LIST DATA END ===\n');
+        }
+    }, [filteredLots]);
+
     const handleSelectMapPin = async (id: string) => {
         console.log(`\n📍 [HomeScreen] === PIN CLICKED ===`);
         console.log(`ID:`, id);
@@ -662,6 +672,45 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
     };
 
     const floatAnim = useRef(new Animated.Value(0)).current;
+    
+    const screenHeight = Dimensions.get('window').height;
+    const sheetHeightAnim = useRef(new Animated.Value(85)).current;
+    const lastHeightRef = useRef(85);
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onMoveShouldSetPanResponder: (_, gestureState) => {
+                return Math.abs(gestureState.dy) > 5;
+            },
+            onPanResponderMove: (_, gestureState) => {
+                let newHeight = lastHeightRef.current - gestureState.dy;
+                if (newHeight > screenHeight * 0.75) newHeight = screenHeight * 0.75;
+                if (newHeight < 85) newHeight = 85;
+                sheetHeightAnim.setValue(newHeight);
+            },
+            onPanResponderRelease: (_, gestureState) => {
+                if (gestureState.dy < -50) {
+                    lastHeightRef.current = screenHeight * 0.75;
+                    Animated.spring(sheetHeightAnim, {
+                        toValue: screenHeight * 0.75,
+                        useNativeDriver: false
+                    }).start();
+                } else if (gestureState.dy > 50) {
+                    lastHeightRef.current = 85;
+                    Animated.spring(sheetHeightAnim, {
+                        toValue: 85,
+                        useNativeDriver: false
+                    }).start();
+                } else {
+                    // snap back to previous state
+                    Animated.spring(sheetHeightAnim, {
+                        toValue: lastHeightRef.current,
+                        useNativeDriver: false
+                    }).start();
+                }
+            }
+        })
+    ).current;
 
     useEffect(() => {
         Animated.loop(
@@ -1123,14 +1172,47 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                 </View>
 
 
-                {/* List View Restored per user request, only visible when showLots is true */}
-                {showLots && filteredLots.length > 0 && (
-                    <View style={{ paddingHorizontal: 16, marginTop: 16, paddingBottom: 16 }}>
-                        <View style={s.sectionTitleRow}>
-                            <Text style={s.sectionHeaderTitle}>Parking Areas List</Text>
+
+            </ScrollView>
+
+            {/* List View Overlay */}
+            {true && (
+                <Animated.View 
+                    style={{ 
+                        position: 'absolute', 
+                        bottom: 85,
+                        left: 0, 
+                        right: 0, 
+                        height: sheetHeightAnim,
+                        backgroundColor: 'white',
+                        borderTopLeftRadius: 24,
+                        borderTopRightRadius: 24,
+                        paddingHorizontal: 16,
+                        paddingTop: 16,
+                        elevation: 10,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: -3 },
+                        shadowOpacity: 0.15,
+                        shadowRadius: 8,
+                        zIndex: 10
+                    }}
+                >
+                    <View {...panResponder.panHandlers} style={{ backgroundColor: 'transparent' }}>
+                        <View style={{width: 40, height: 4, backgroundColor: '#E2E8F0', borderRadius: 2, alignSelf: 'center', marginBottom: 12}} />
+                        <View style={[s.sectionTitleRow, {marginBottom: 8}]}>
+                            <Text style={s.sectionHeaderTitle}>Nearby Parking Areas (Drag Up)</Text>
                         </View>
-                        {filteredLots.slice(0, displayCount).map((lot, idx) => {
-                            const name = lot.location || lot.name || 'Parking Area';
+                    </View>
+                    <ScrollView 
+                        style={{ flex: 1 }}
+                        showsVerticalScrollIndicator={true} 
+                        contentContainerStyle={{ paddingBottom: 20 }}
+                        nestedScrollEnabled={true}
+                        pointerEvents="auto"
+                    >
+                        {filteredLots.length > 0 ? (
+                            filteredLots.slice(0, displayCount).map((lot, idx) => {
+                                const name = lot.location || lot.name || 'Parking Area';
                             const address = lot.address || 'Kolkata';
                             const distance = lot.distance_km ? `${lot.distance_km.toFixed(1)} km away` : 'Near you';
 
@@ -1144,7 +1226,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                                         backgroundColor: '#FFFFFF',
                                         borderRadius: 16,
                                         padding: 16,
-                                        marginTop: 12,
+                                        marginBottom: 12,
                                         borderWidth: 1,
                                         borderColor: '#F1F5F9',
                                         elevation: 2,
@@ -1179,10 +1261,13 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                                     </View>
                                 </Pressable>
                             );
-                        })}
-                    </View>
-                )}
-            </ScrollView>
+                        })
+                        ) : (
+                            <Text style={{ textAlign: 'center', marginTop: 20, color: '#64748B' }}>No Data Found</Text>
+                        )}
+                    </ScrollView>
+                </Animated.View>
+            )}
 
             {/* Scroll to Top */}
             {filteredLots.length > 5 && viewMode !== 'map' && showScrollToTop && (
