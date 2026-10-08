@@ -81,7 +81,7 @@ export default function BottomNav({
   go: (s: ScreenName) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const bottomPadding = Math.max(insets.bottom * 0.9, 4);
+  const bottomPadding = Math.max(insets.bottom, 16) + 4;
 
   return (
     <View style={[styles.fullWidthContainer, { paddingBottom: bottomPadding }]}>
@@ -178,3 +178,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+

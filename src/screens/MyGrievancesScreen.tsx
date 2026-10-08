@@ -9,6 +9,7 @@ import {
   Image,
   Modal,
   StatusBar,
+  Alert,
 } from 'react-native';
 import CivicNavbar from '../components/CivicNavbar';
 import { colors } from '../theme/colors';
@@ -25,6 +26,9 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
 
   // Full-screen Image Modal State
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+
+  // Detail Text Modal State
+  const [detailModal, setDetailModal] = useState<{title: string, text: string} | null>(null);
 
   const fetchGrievances = async () => {
     console.log('[MyGrievancesScreen] fetchGrievances triggered!');
@@ -171,11 +175,17 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
             <Text style={s.title}>{typeName}</Text>
 
             {item.grievance_text ? (
-              <View style={s.descBox}>
+              <Pressable
+                style={s.descBox}
+                onPress={() => setDetailModal({title: typeName, text: item.grievance_text})}
+              >
                 <Text style={s.description} numberOfLines={3}>
                   "{item.grievance_text}"
                 </Text>
-              </View>
+                <Text style={{ fontSize: 10, color: colors.primary, marginTop: 4, fontWeight: 'bold' }}>
+                  Read More
+                </Text>
+              </Pressable>
             ) : null}
 
             {/* Location & Slot Information */}
@@ -225,7 +235,10 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
 
         {/* 3. Official Municipal Remarks Section */}
         {adminRemarks ? (
-          <View style={s.remarksCard}>
+          <Pressable 
+            style={s.remarksCard}
+            onPress={() => setDetailModal({title: 'Official Resolution', text: adminRemarks})}
+          >
             <View style={s.remarksHeader}>
               <Image
                 source={require('../../assets/icons/icon_shield_check.png')}
@@ -234,8 +247,11 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
               />
               <Text style={s.remarksLabel}>OFFICIAL RESOLUTION REMARKS</Text>
             </View>
-            <Text style={s.remarksText}>{adminRemarks}</Text>
-          </View>
+            <Text style={s.remarksText} numberOfLines={3}>{adminRemarks}</Text>
+            <Text style={{ fontSize: 10, color: '#D97706', marginTop: 4, fontWeight: 'bold' }}>
+              Read More
+            </Text>
+          </Pressable>
         ) : null}
 
         {/* 4. Footer (Severity & Lodged Date) */}
@@ -366,7 +382,36 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
         </View>
       </Modal>
 
-      {/* ================= 5. CUSTOM CAR LOADER ================= */}
+      {/* ================= 5. DETAIL TEXT MODAL ================= */}
+      <Modal visible={!!detailModal} transparent animationType="fade" onRequestClose={() => setDetailModal(null)}>
+        <View style={s.popupBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDetailModal(null)} />
+          <View style={s.popupCard}>
+            <View style={s.popupHeaderRow}>
+              <View>
+                <View style={s.popupThemeTag}>
+                  <Text style={s.popupThemeTagText}>GRIEVANCE DETAILS</Text>
+                </View>
+                <Text style={s.popupTitle}>{detailModal?.title}</Text>
+              </View>
+              <Pressable
+                onPress={() => setDetailModal(null)}
+                style={s.popupCloseCircle}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={s.popupCloseText}>✕</Text>
+              </Pressable>
+            </View>
+            <View style={s.popupContentBox}>
+              <Text style={s.popupContentText}>{detailModal?.text}</Text>
+            </View>
+            <Pressable onPress={() => setDetailModal(null)} style={s.popupOkBtn}>
+              <Text style={s.popupOkText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ================= 6. CUSTOM CAR LOADER ================= */}
       <CarLoader visible={loading && !refreshing} message="Fetching your grievances..." />
     </View>
   );
@@ -766,5 +811,96 @@ const s = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+
+  /* Detail Popup Modal Styles */
+  popupBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.68)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  popupCard: {
+    width: '100%',
+    maxWidth: 345,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+  popupHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  popupThemeTag: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  popupThemeTagText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#2563EB',
+    letterSpacing: 0.5,
+  },
+  popupTitle: {
+    fontSize: 16.5,
+    fontWeight: '900',
+    color: '#0F172A',
+    letterSpacing: -0.2,
+    maxWidth: 240,
+  },
+  popupCloseCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  popupCloseText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#64748B',
+  },
+  popupContentBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+    maxHeight: 250,
+  },
+  popupContentText: {
+    fontSize: 14,
+    color: '#334155',
+    lineHeight: 22,
+  },
+  popupOkBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  popupOkText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

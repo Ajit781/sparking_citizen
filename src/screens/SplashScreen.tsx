@@ -32,13 +32,8 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // 1. Pre-warm token in background
-    authService.initToken().catch(err => {
-      console.warn('[SplashScreen] Token pre-warm notice:', err?.message || err);
-    });
-
-    // 1.5 Check dynamic App Version and Base URL
-    const checkAppVersion = async () => {
+    // 1. Check dynamic App Version and Base URL, THEN pre-warm token
+    const initApp = async () => {
       try {
         // Load cached url first (in case offline or slow network)
         const cachedUrl = await AsyncStorage.getItem('@dynamic_base_url');
@@ -50,7 +45,7 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
         const packageName = DeviceInfo.getBundleId();
         const appVersion = DeviceInfo.getVersion();
         console.log(`📡 [SplashScreen] Calling CheckAppVersion API for Package: ${packageName}, Version: ${appVersion}`);
-        
+
         const formData = new URLSearchParams();
         formData.append('Package', packageName);
         formData.append('Version', appVersion);
@@ -69,17 +64,24 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
           API_CONFIG.BASE_URL = data.base_url;
           await AsyncStorage.setItem('@dynamic_base_url', data.base_url);
         } else if (data && data.status === 0) {
-           Alert.alert("Notice", data.message || "Unable to fetch server details.");
+          Alert.alert("Notice", data.message || "Unable to fetch server details.");
         }
       } catch (error) {
         console.error('❌ [SplashScreen] AppVersion Check Failed:', error);
         if (!API_CONFIG.BASE_URL) {
           Alert.alert("Connection Error", "Failed to connect to the server. Please check your internet connection and try again.");
         }
+      } finally {
+        // Pre-warm token in background AFTER base URL is resolved
+        if (API_CONFIG.BASE_URL) {
+          authService.initToken().catch(err => {
+            console.warn('[SplashScreen] Token pre-warm notice:', err?.message || err);
+          });
+        }
       }
     };
 
-    checkAppVersion();
+    initApp();
 
     // 2. Entrance Animation (Fade-in + Spring Scale)
     Animated.parallel([

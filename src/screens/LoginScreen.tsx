@@ -107,13 +107,13 @@ export default function LoginScreen({
             {/* Center Welcome Section */}
             <View style={s.formCard}>
               <Text style={[s.title, { color: primaryDarkColor }]}>Welcome to Smart Parking</Text>
-              <Text style={s.subtitle}>Smart Parking</Text>
-              <View style={[s.subAccentBar, { backgroundColor: primaryColor }]} />
+              <Text style={s.subtitle}> </Text>
+              <View />
 
               {/* Dynamic Error Banner */}
               {!!errorMessage && (
                 <View style={s.errorContainer}>
-                  <Text style={s.errorIcon}>⚠️</Text>
+                  <Text style={s.errorIcon}></Text>
                   <Text style={s.errorText}>{errorMessage}</Text>
                 </View>
               )}
@@ -161,11 +161,11 @@ export default function LoginScreen({
                 </View>
                 <Text style={s.termsText}>
                   I agree to the{' '}
-                  <Text 
+                  <Text
                     style={[s.termsLink, { color: primaryColor }]}
                     onPress={() => Linking.openURL('http://www.s-parking.com/termscondition.html')}
                   >Terms & Conditions</Text> and{' '}
-                  <Text 
+                  <Text
                     style={[s.termsLink, { color: primaryColor }]}
                     onPress={() => Linking.openURL('http://www.s-parking.com/privacypolicy.html')}
                   >Privacy Policy</Text>

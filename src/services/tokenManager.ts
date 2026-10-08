@@ -41,9 +41,9 @@ class TokenManager {
     const now = Date.now();
 
     // 1. Check in-memory cache
-    if (this.cachedToken && this.cachedToken.expiresAtTimestamp > now + 5 * 60 * 1000) {
+    if (this.cachedToken && this.cachedToken.expiresAtTimestamp > now + 60 * 1000) {
       const remainingMinutes = Math.round((this.cachedToken.expiresAtTimestamp - now) / 60000);
-      console.log(`⚡ [TokenManager] Using in-memory token (Valid for next ${remainingMinutes} mins)`);
+      console.log(`🟢 [TokenManager] USING OLD STORED TOKEN (From Memory Cache - Valid for next ${remainingMinutes} mins)`);
       return this.cachedToken.accessToken;
     }
 
@@ -52,16 +52,16 @@ class TokenManager {
       const stored = await storageService.getToken();
       if (stored?.token && stored?.expiresAt) {
         const storedExpiry = new Date(stored.expiresAt.replace(' ', 'T')).getTime();
-        if (!isNaN(storedExpiry) && storedExpiry > now + 5 * 60 * 1000) {
+        if (!isNaN(storedExpiry) && storedExpiry > now + 60 * 1000) {
           const remainingMinutes = Math.round((storedExpiry - now) / 60000);
-          console.log(`💾 [TokenManager] Loaded valid token from Local DB (Valid for next ${remainingMinutes} mins)`);
+          console.log(`🟢 [TokenManager] USING OLD STORED TOKEN (From Local DB - Valid for next ${remainingMinutes} mins)`);
           this.cachedToken = {
             accessToken: stored.token,
             expiresAtTimestamp: storedExpiry,
           };
           return stored.token;
         } else {
-          console.log('⌛ [TokenManager] Local DB token has expired. Requesting fresh token...');
+          console.log('🟠 [TokenManager] OLD TOKEN EXPIRED. Need to generate a new one...');
         }
       }
     } catch (e) {
@@ -98,7 +98,7 @@ class TokenManager {
     };
 
     console.log('═══════════════════════════════════════════════');
-    console.log('🔑 [TokenManager] START FETCHING NEW TOKEN');
+    console.log('🟠 [TokenManager] GENERATING NEW TOKEN FROM SERVER');
     console.log('🌐 [TokenManager] URL:', url);
     console.log('📤 [TokenManager] Payload:', JSON.stringify(payload));
     console.log('═══════════════════════════════════════════════');
@@ -136,18 +136,18 @@ class TokenManager {
       console.log('⏳ [TokenManager] Token Expires At:', json.data.expires_at);
       console.log('═══════════════════════════════════════════════');
 
-      // Parse expires_at (e.g. "2026-09-16 08:21:10")
-      const expiryTimestamp = json.data.expires_at
-        ? new Date(json.data.expires_at.replace(' ', 'T')).getTime()
-        : Date.now() + 24 * 60 * 60 * 1000;
+      // 🕒 Timezone Fix: Server sends time in a different timezone (e.g. 02:04 vs 14:04).
+      // Parsing it directly makes the device think the token is already expired!
+      // We know the token is valid for 5 minutes, so we calculate expiry locally.
+      const expiryTimestamp = Date.now() + 5 * 60 * 1000;
 
       this.cachedToken = {
         accessToken,
-        expiresAtTimestamp: isNaN(expiryTimestamp) ? Date.now() + 24 * 60 * 60 * 1000 : expiryTimestamp,
+        expiresAtTimestamp: expiryTimestamp,
       };
 
-      // Persist to Local DB
-      await storageService.saveToken(accessToken, json.data.expires_at);
+      // Persist to Local DB using our local calculated expiry
+      await storageService.saveToken(accessToken, new Date(expiryTimestamp).toISOString());
 
       return accessToken;
     } catch (error: any) {

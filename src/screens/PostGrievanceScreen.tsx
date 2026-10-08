@@ -133,6 +133,16 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
     setPhotos(p => p.filter((_, i) => i !== index));
   };
 
+  const handleMapPress = (e: any) => {
+    const lat = e.nativeEvent?.latitude || e.nativeEvent?.coordinate?.latitude;
+    const lng = e.nativeEvent?.longitude || e.nativeEvent?.coordinate?.longitude;
+    if (lat && lng) {
+      console.log(`[PostGrievance] Map tapped at: ${lat}, ${lng}`);
+      // Safely update coordinates and let the React state push the new region down to the map
+      setLocationCoords({ lat, lng });
+    }
+  };
+
   const handleUseCurrentLocation = async () => {
     let hasPermission = false;
     if (Platform.OS === 'android') {
@@ -430,6 +440,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
                   title: 'Selected Location',
                   color: 'blue'
                 }]}
+                onMapPress={handleMapPress}
               />
 
               {/* Floating 'Use Current Location' Button */}
@@ -732,7 +743,7 @@ const s = StyleSheet.create({
     marginBottom: 1,
   },
   fieldPickerVal: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '700',
     color: '#0F172A',
   },
@@ -770,7 +781,7 @@ const s = StyleSheet.create({
     borderRadius: 3.5,
   },
   severityChipText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '700',
     color: '#64748B',
   },
@@ -785,7 +796,7 @@ const s = StyleSheet.create({
     position: 'relative',
   },
   textAreaInput: {
-    fontSize: 13.5,
+    fontSize: 12,
     color: '#0F172A',
     minHeight: 84,
     textAlignVertical: 'top',
@@ -1117,7 +1128,7 @@ const s = StyleSheet.create({
     tintColor: '#64748B',
   },
   popupOptionText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: '#334155',
     flex: 1,

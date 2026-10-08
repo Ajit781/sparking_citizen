@@ -657,18 +657,8 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
             console.log(`[MAP CLICK] Natively moving camera to Lat: ${lat}, Lng: ${lng}`);
         }
 
-        // Fetch details & open popup sheet above bottom tabs
-        setIsFetchingDetails(true);
-        const lotIdNum = parseInt(lot.parking_area_id || lot.id, 10);
-        let finalDetails = lot;
-        if (!isNaN(lotIdNum)) {
-            const details = await citizenService.getCitizenParkingAreaDetails(lotIdNum, null);
-            finalDetails = details || lot;
-            setSelectedParkingForModal(finalDetails);
-        } else {
-            setSelectedParkingForModal(lot);
-        }
-        setIsFetchingDetails(false);
+        // Just open popup sheet immediately with list data to save API calls
+        setSelectedParkingForModal(lot);
     };
 
     const floatAnim = useRef(new Animated.Value(0)).current;
@@ -1180,7 +1170,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                 <Animated.View 
                     style={{ 
                         position: 'absolute', 
-                        bottom: 85,
+                        bottom: 48 + Math.max(insets.bottom, 16),
                         left: 0, 
                         right: 0, 
                         height: sheetHeightAnim,
@@ -1263,7 +1253,10 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                             );
                         })
                         ) : (
-                            <Text style={{ textAlign: 'center', marginTop: 20, color: '#64748B' }}>No Data Found</Text>
+                            <View style={{ alignItems: 'center', marginTop: 40, paddingHorizontal: 20 }}>
+                                <Text style={{ textAlign: 'center', color: '#475569', fontSize: 16, fontWeight: '700' }}>No Nearby Parking</Text>
+                                <Text style={{ textAlign: 'center', color: '#94A3B8', fontSize: 13, marginTop: 6, lineHeight: 18 }}>We couldn't find any parking areas near this location. Try searching for a different spot.</Text>
+                            </View>
                         )}
                     </ScrollView>
                 </Animated.View>
@@ -1412,8 +1405,8 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                         {
                             zIndex: 9999,
                             justifyContent: 'flex-end',
-                            // ✅ Bottom tabs visible rahenge aur modal unke theek upar aayega
-                            bottom: 60 + Math.max(insets.bottom, 6),
+                            // ✅ Thoda sa niche kiya, par bottom tabs ya phone ki screen se buttons chhupe nahi
+                            bottom: 25 + Math.max(insets.bottom, 0),
                         },
                     ]}
                     pointerEvents="box-none"
@@ -1537,7 +1530,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                             </View>
 
                             {/* Advance Booking Notice */}
-                            {selectedParkingForModal?.advance_booking?.enabled === false ? (
+                            {selectedParkingForModal?.advance_booking?.enabled !== true ? (
                                 <View style={s.bookingNoticeBarDisabled}>
                                     <Text style={s.bookingNoticeTextDisabled}>
                                         ℹ️ Advance Booking: Unavailable
@@ -1572,33 +1565,47 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
                             </Pressable>
 
                             <Pressable
-                                onPress={() => {
+                                onPress={async () => {
                                     const lot = selectedParkingForModal;
-                                    if (lot?.advance_booking?.enabled === false) {
+                                    if (lot?.advance_booking?.enabled !== true) {
                                         setSelectedParkingForModal(null);
                                         setBookingDisabledModal({
                                             visible: true,
                                             lotName: lot?.location || lot?.name || 'this parking',
                                         });
                                     } else {
-                                        citizenService.setSelectedParkingDetails(lot);
-                                        setSelectedParkingForModal(null);
                                         setIsBooking(true);
+                                        
+                                        // Fetch details ONLY when user clicks Book Slot
+                                        const lotIdNum = parseInt(lot?.parking_area_id || lot?.id, 10);
+                                        let finalDetails = lot;
+                                        if (!isNaN(lotIdNum)) {
+                                            try {
+                                                const details = await citizenService.getCitizenParkingAreaDetails(lotIdNum, null);
+                                                finalDetails = details || lot;
+                                            } catch (err) {
+                                                console.error('Error fetching parking area details before booking:', err);
+                                            }
+                                        }
+
+                                        citizenService.setSelectedParkingDetails(finalDetails);
+                                        setSelectedParkingForModal(null);
+                                        
                                         setTimeout(() => {
                                             setIsBooking(false);
                                             go('parkingDetails');
-                                        }, 1200);
+                                        }, 400); // reduced timeout slightly since we already waited for API
                                     }
                                 }}
                                 style={({ pressed }) => [
                                     s.sheetBookBtn,
                                     pressed && s.sheetBookBtnPressed,
-                                    selectedParkingForModal?.advance_booking?.enabled === false && s.sheetBookBtnDisabled,
+                                    selectedParkingForModal?.advance_booking?.enabled !== true && s.sheetBookBtnDisabled,
                                 ]}>
                                 <Text style={s.sheetBookBtnText}>
-                                    {selectedParkingForModal?.advance_booking?.enabled === false ? 'Booking Unavailable' : 'Book Slot'}
+                                    {selectedParkingForModal?.advance_booking?.enabled !== true ? 'Booking Unavailable' : 'Book Slot'}
                                 </Text>
-                                {selectedParkingForModal?.advance_booking?.enabled !== false && (
+                                {selectedParkingForModal?.advance_booking?.enabled === true && (
                                     <Image
                                         source={require('../../assets/icons/icon_chevron.png')}
                                         style={s.sheetBookChevron}

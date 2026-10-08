@@ -18,7 +18,7 @@ import { authService } from '../services/authService';
 import { UserSession } from '../services/storageService';
 import { citizenService, CitizenProfile } from '../services/citizenService';
 import { getCitizenAvatarSource, DEFAULT_CITIZEN_AVATAR_BASE64 } from '../constants/defaultAvatar';
-import pkg from '../../package.json';
+import DeviceInfo from 'react-native-device-info';
 
 interface ProfileScreenProps {
   onVehicles: () => void;
@@ -461,7 +461,7 @@ export default function ProfileScreen({
                   visible: true,
                   title: 'About S-Parking',
                   content:
-                    `S-Parking Citizen Mobile Application v${pkg.version}\n\nPark Smart. Move Better.`,
+                    `S-Parking Citizen Mobile Application v${DeviceInfo.getVersion()}\n\nPark Smart. Move Better.`,
                 })
               }
               style={({ pressed }) => [s.settingsRow, pressed && { opacity: 0.5 }]}>
@@ -472,7 +472,7 @@ export default function ProfileScreen({
                   resizeMode="contain"
                 />
               </View>
-              <Text style={s.settingsLabel}>About v{pkg.version}</Text>
+              <Text style={s.settingsLabel}>About v{DeviceInfo.getVersion()}</Text>
               <Image
                 source={require('../../assets/icons/icon_chevron.png')}
                 style={s.settingsChevron}
