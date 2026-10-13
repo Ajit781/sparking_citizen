@@ -1,5 +1,5 @@
-import {API_CONFIG} from '../config/api.config';
-import {storageService} from './storageService';
+import { API_CONFIG } from '../config/api.config';
+import { storageService } from './storageService';
 
 export interface TokenResponse {
   version: string;
@@ -22,7 +22,7 @@ class TokenManager {
   private cachedToken: CachedToken | null = null;
   private pendingTokenPromise: Promise<string> | null = null;
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): TokenManager {
     if (!TokenManager.instance) {
@@ -61,11 +61,11 @@ class TokenManager {
           };
           return stored.token;
         } else {
-          console.log('🟠 [TokenManager] OLD TOKEN EXPIRED. Need to generate a new one...');
+          console.log(' [TokenManager] OLD TOKEN EXPIRED. Need to generate a new one...');
         }
       }
     } catch (e) {
-      console.warn('⚠️ [TokenManager] Failed to read from local DB, continuing to network:', e);
+      console.warn('[TokenManager] Failed to read from local DB, continuing to network:', e);
     }
 
     // 3. Deduplicate in-flight network requests
