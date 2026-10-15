@@ -13,6 +13,7 @@ export interface UserSession {
   login_user_id: number;
   vehicle_count: number;
   vehicle_owner_id: number;
+  random_no?: string;
 }
 
 const STORAGE_KEYS = {
@@ -125,7 +126,7 @@ class StorageService {
   public async saveUserSession(session: UserSession): Promise<void> {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.USER_SESSION, JSON.stringify(session));
-      console.log('👤 [Storage] User session saved for mobile:', session.mobile_no);
+      console.log('👤 [Storage] User session saved');
     } catch (error) {
       console.error('❌ [Storage] Error saving user session:', error);
     }

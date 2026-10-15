@@ -16,6 +16,7 @@ import { colors } from '../theme/colors';
 import { citizenService } from '../services/citizenService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CarLoader from '../components/CarLoader';
+import { API_CONFIG } from '../config/api.config';
 
 export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack: () => void, onPostGrievance?: () => void }) {
   const insets = useSafeAreaInsets();
@@ -35,7 +36,9 @@ export default function MyGrievancesScreen({ onBack, onPostGrievance }: { onBack
     try {
       const result = await citizenService.getCitizenGrievancesByLogin();
       
-      console.log('--- RAW GRIEVANCE API RESPONSE ---', JSON.stringify(result, null, 2));
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('--- RAW GRIEVANCE API RESPONSE ---', JSON.stringify(result, null, 2));
+      }
 
       let list = [];
       if (Array.isArray(result)) {

@@ -1,5 +1,6 @@
 import { API_CONFIG } from '../config/api.config';
 import { storageService } from './storageService';
+import { encryptionService } from './encryptionService';
 
 export interface TokenResponse {
   version: string;
@@ -90,11 +91,17 @@ class TokenManager {
   public async requestNewToken(): Promise<string> {
     const url = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.GENERATE_TOKEN}`;
 
+    let encData = JSON.stringify({
+      username: API_CONFIG.AUTH_CREDENTIALS.username,
+      password: API_CONFIG.AUTH_CREDENTIALS.password,
+    });
+
+    if (encryptionService.isEncryptionEnabled()) {
+      encData = await encryptionService.encrypt(encData);
+    }
+
     const payload = {
-      enc_data: JSON.stringify({
-        username: API_CONFIG.AUTH_CREDENTIALS.username,
-        password: API_CONFIG.AUTH_CREDENTIALS.password,
-      }),
+      enc_data: encData,
     };
 
     console.log('═══════════════════════════════════════════════');
@@ -131,9 +138,13 @@ class TokenManager {
       }
 
       const accessToken = json.data.access_token;
-      console.log('🎫 [TokenManager] Access Token:', accessToken);
-      console.log('⏰ [TokenManager] Token Created At:', json.data.created_at);
-      console.log('⏳ [TokenManager] Token Expires At:', json.data.expires_at);
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('🎫 [TokenManager] Access Token:', accessToken);
+        console.log('⏰ [TokenManager] Token Created At:', json.data.created_at);
+        console.log('⏳ [TokenManager] Token Expires At:', json.data.expires_at);
+      } else {
+        console.log('🎫 [TokenManager] Access Token generated & cached securely');
+      }
       console.log('═══════════════════════════════════════════════');
 
       // 🕒 Timezone Fix: Server sends time in a different timezone (e.g. 02:04 vs 14:04).

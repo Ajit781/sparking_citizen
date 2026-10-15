@@ -27,6 +27,7 @@ import {
 export const NativeMultiMap = requireNativeComponent('NativeMultiMap');
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
+import { API_CONFIG } from '../config/api.config';
 import { ScreenName } from '../types/navigation';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { authService } from '../services/authService';
@@ -123,7 +124,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
         }
         try {
             const data = await citizenService.getCitizenNearbyParkingAreas(lat, lng, 2, vType);
-            if (data && data.length > 0) {
+            if (!API_CONFIG.ENV.ENABLE_ENCRYPTION && data && data.length > 0) {
                 console.log('PARKING LOT DATA:', JSON.stringify(data[0]));
             }
             setMarkersReady(false);
@@ -165,7 +166,9 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
             try {
                 console.log(`[MAP CLICK] Requesting parking areas for Lat: ${lat}, Lng: ${lng}`);
                 const data = await citizenService.getCitizenNearbyParkingAreas(lat, lng, 2, activeCategory);
-                console.log("[MAP CLICK API RESPONSE]:", JSON.stringify(data, null, 2));
+                if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+                    console.log("[MAP CLICK API RESPONSE]:", JSON.stringify(data, null, 2));
+                }
 
                 if (data && data.length > 0) {
                     cachedParkingLots = data;
@@ -372,11 +375,15 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
 
         authService.getStoredSession().then(async session => {
             if (session) {
-                console.log("[API RESPONSE - userSession]:", JSON.stringify(session, null, 2));
+                if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+                    console.log("[API RESPONSE - userSession]:", JSON.stringify(session, null, 2));
+                }
                 setUserSession(session);
                 try {
                     const profile = await citizenService.getCitizenProfile(session.login_user_id);
-                    console.log("[API RESPONSE - citizenProfile]:", JSON.stringify(profile, null, 2));
+                    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+                        console.log("[API RESPONSE - citizenProfile]:", JSON.stringify(profile, null, 2));
+                    }
                     if (profile) {
                         setCitizenProfile(profile);
                         const percent = calculateProfileCompletion(profile);
@@ -621,7 +628,7 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
     }, [parkingLots, searchQuery, selectedAddress]);
 
     useEffect(() => {
-        if (filteredLots.length > 0) {
+        if (!API_CONFIG.ENV.ENABLE_ENCRYPTION && filteredLots.length > 0) {
             console.log('\n=== PARKING LIST DATA START ===');
             console.log(JSON.stringify(filteredLots, null, 2));
             console.log('=== PARKING LIST DATA END ===\n');
@@ -644,7 +651,9 @@ export default function HomeScreen({ go, onLogout, isActive = true }: HomeScreen
         }
 
         const lot = filteredLots[lotIndex];
-        console.log(`📋 [HomeScreen] Selected Lot Data (from list):`, JSON.stringify(lot, null, 2));
+        if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+            console.log(`📋 [HomeScreen] Selected Lot Data (from list):`, JSON.stringify(lot, null, 2));
+        }
 
         // Smooth map camera focus
         const rawLat = lot.latitude ?? lot.lat;

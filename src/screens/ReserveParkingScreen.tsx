@@ -461,6 +461,9 @@ export default function ReserveParkingScreen({ onBack, onBookSuccess }: ReserveP
                   </View>
                 </View>
                 <Text style={s.ticketMainHeading}>Reservation Confirmed!</Text>
+                {!!bookingSuccessData.message && (
+                  <Text style={s.ticketSubHeading}>{bookingSuccessData.message}</Text>
+                )}
               </View>
 
               {/* Perforated Tear Line */}

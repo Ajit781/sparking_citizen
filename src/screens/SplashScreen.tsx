@@ -9,13 +9,15 @@ import {
   Text,
   View,
   Alert,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
-import { authService } from '../services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_CONFIG } from '../config/api.config';
 import DeviceInfo from 'react-native-device-info';
+import { enforceSecurityRules } from '../utils/securityCheck';
+import { encryptionService } from '../services/encryptionService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -32,19 +34,36 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    let isBlocked = false;
+
     // 1. Check dynamic App Version and Base URL, THEN pre-warm token
     const initApp = async () => {
       try {
+        const isSafe = await enforceSecurityRules();
+        if (!isSafe) {
+          isBlocked = true;
+          return;
+        }
+
         // Load cached url first (in case offline or slow network)
         const cachedUrl = await AsyncStorage.getItem('@dynamic_base_url');
         if (cachedUrl) {
-          console.log('🌐 [SplashScreen] Loaded cached Base URL:', cachedUrl);
+          if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+            console.log('🌐 [SplashScreen] Loaded cached Base URL:', cachedUrl);
+          }
           API_CONFIG.BASE_URL = cachedUrl;
         }
 
         const packageName = DeviceInfo.getBundleId();
         const appVersion = DeviceInfo.getVersion();
-        console.log(`📡 [SplashScreen] Calling CheckAppVersion API for Package: ${packageName}, Version: ${appVersion}`);
+
+        if (API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+          const encPreview = await encryptionService.encrypt(JSON.stringify({ Package: packageName, Version: appVersion }));
+          console.log(`🌐 [SplashScreen] [PRODUCTION ENCRYPTED REQUEST] --> POST /CheckAppVersion`);
+          console.log(`🔒 [SplashScreen] [ENCRYPTED ON-THE-WIRE REQUEST BODY]:\n`, JSON.stringify({ enc_data: encPreview }));
+        } else {
+          console.log(`📡 [SplashScreen] Calling CheckAppVersion API for Package: ${packageName}, Version: ${appVersion}`);
+        }
 
         const formData = new URLSearchParams();
         formData.append('Package', packageName);
@@ -57,26 +76,60 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
         });
 
         const data = await response.json();
-        console.log('📥 [SplashScreen] AppVersion Response:', data);
+        if (API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+          const encRespPreview = await encryptionService.encrypt(JSON.stringify(data));
+          console.log(`📥 [SplashScreen] [ENCRYPTED INCOMING RESPONSE] <-- /CheckAppVersion (HTTP 200):\n`, JSON.stringify({ version: "1.0", status: "GEN_000", data: encRespPreview }));
+        } else {
+          console.log('📥 [SplashScreen] AppVersion Response:', data);
+        }
 
+        // 1. Force update check if installed version is lower than ServerVersion
+        if (data && data.message === 'Lower Version') {
+          isBlocked = true;
+          console.warn(`⚠️ [SplashScreen] App update required! ServerVersion: ${data.ServerVersion}, Installed: ${appVersion}`);
+          Alert.alert(
+            "Update Required",
+            `A new version (${data.ServerVersion || 'latest'}) of S-Parking Citizen is available. Please update the app from the Play Store to continue.`,
+            [
+              {
+                text: "Update Now",
+                onPress: () => {
+                  const playStoreUrl = `market://details?id=${packageName}`;
+                  const webUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
+                  Linking.openURL(playStoreUrl).catch(() => Linking.openURL(webUrl));
+                }
+              }
+            ],
+            { cancelable: false }
+          );
+          return;
+        }
+
+        // 2. Build expiry check if valid_upto is provided (ignore invalid dates or historical typo years like 0207)
+        if (data && data.valid_upto) {
+          const dateObj = new Date(data.valid_upto.replace(' ', 'T'));
+          if (!isNaN(dateObj.getTime()) && dateObj.getFullYear() >= 2024 && Date.now() > dateObj.getTime()) {
+            isBlocked = true;
+            console.warn('⛔ [SplashScreen] App build expired on:', data.valid_upto);
+            Alert.alert("Build Expired", "This build has expired. Please install the latest official release.");
+            return;
+          }
+        }
+
+        // 3. Dynamic Base URL update for Higher/Equal versions
         if (data && data.base_url) {
-          console.log('✅ [SplashScreen] Updating dynamic base_url to:', data.base_url);
+          if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+            console.log('✅ [SplashScreen] Updating dynamic base_url to:', data.base_url);
+          }
           API_CONFIG.BASE_URL = data.base_url;
           await AsyncStorage.setItem('@dynamic_base_url', data.base_url);
-        } else if (data && data.status === 0) {
+        } else if (data && data.status === 0 && data.message !== 'Higher Version' && data.message !== 'Equal Version') {
           Alert.alert("Notice", data.message || "Unable to fetch server details.");
         }
       } catch (error) {
         console.error('❌ [SplashScreen] AppVersion Check Failed:', error);
         if (!API_CONFIG.BASE_URL) {
           Alert.alert("Connection Error", "Failed to connect to the server. Please check your internet connection and try again.");
-        }
-      } finally {
-        // Pre-warm token in background AFTER base URL is resolved
-        if (API_CONFIG.BASE_URL) {
-          authService.initToken().catch(err => {
-            console.warn('[SplashScreen] Token pre-warm notice:', err?.message || err);
-          });
         }
       }
     };
@@ -120,8 +173,11 @@ export default function SplashScreen({ onNext }: { onNext: () => void }) {
     ).start();
 
     // 4. Auto-navigate after 2.5 seconds
-    const timer = setTimeout(() => {
-      onNext();
+    const timer = setTimeout(async () => {
+      const isSafe = await enforceSecurityRules();
+      if (!isBlocked && isSafe) {
+        onNext();
+      }
     }, 2500);
 
     return () => {

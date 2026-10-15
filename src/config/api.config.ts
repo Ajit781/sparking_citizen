@@ -39,4 +39,14 @@ export const API_CONFIG = {
 
   // Request timeout in milliseconds
   TIMEOUT_MS: 15000,
+
+  // Environment and Encryption Settings
+  ENV: {
+    // Set to true for Production (AES-256-GCM enabled), false for Staging (Normal plaintext)
+    IS_PRODUCTION: true,
+    // Master encryption switch: When true, payload enc_data is AES-256-GCM encrypted
+    ENABLE_ENCRYPTION: true,
+    // 256-bit AES-GCM Key (64-character hex string)
+    GCM_KEY_HEX: '710f5a3bbcb3c168409c47774ba11897be76f08e997085377803271c4d42e961',
+  },
 };

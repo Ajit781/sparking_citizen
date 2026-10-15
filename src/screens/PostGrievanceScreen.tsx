@@ -61,6 +61,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showVisionCamera, setShowVisionCamera] = useState(false);
   const [successTicket, setSuccessTicket] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [isLocating, setIsLocating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -236,6 +237,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
 
       const ticketNo = result?.data?.ticket_no || result?.ticket_no || `GRV-${Math.floor(10000 + Math.random() * 90000)}`;
       setSuccessTicket(ticketNo);
+      setSuccessMessage(result?.message || 'Your grievance has been successfully forwarded to the Grievance Redressal Cell.');
       setIsSubmitting(false);
       setShowSuccessModal(true);
     } catch (error: any) {
@@ -606,7 +608,7 @@ export default function PostGrievanceScreen({ onBack, onSubmitted }: PostGrievan
             </View>
             <Text style={s.successMainTitle}>Grievance Added!</Text>
             <Text style={s.successSubText}>
-              Your grievance has been successfully forwarded to the Grievance Redressal Cell.
+              {successMessage || 'Your grievance has been successfully forwarded to the Grievance Redressal Cell.'}
             </Text>
 
             <View style={s.ticketBox}>

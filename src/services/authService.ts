@@ -1,16 +1,27 @@
-import {API_CONFIG} from '../config/api.config';
-import {apiClient} from './apiClient';
-import {storageService, UserSession} from './storageService';
-import {tokenManager} from './tokenManager';
+import { API_CONFIG } from '../config/api.config';
+import { apiClient } from './apiClient';
+import { storageService, UserSession } from './storageService';
+import { tokenManager } from './tokenManager';
+import { encryptionService } from './encryptionService';
 
 export interface GenerateOtpResult {
-  mobile_no: string;
-  is_registered: boolean;
-  otp_request_id: number;
+  mobile_no?: string;
+  is_registered?: boolean;
+  otp_request_id?: number;
   otp_for_gateway?: string;
-  expires_in_seconds: number;
-  resend_after_seconds: number;
+  expires_in_seconds?: number;
+  resend_after_seconds?: number;
+  message?: string;
+  random_no?: string;
+  [key: string]: any;
 }
+
+/**
+ * Generate a unique 10-digit random number for anti-replay verification
+ */
+const generateRandomNo = (): string => {
+  return Math.floor(1000000000 + Math.random() * 9000000000).toString();
+};
 
 export const authService = {
   /**
@@ -41,33 +52,59 @@ export const authService = {
     const deviceId = await storageService.getDeviceId();
     const deviceModel = storageService.getDeviceModel();
     const fcmPushToken = API_CONFIG.DEFAULT_FCM_TOKEN;
+    const randomNo = generateRandomNo();
 
     const payload = {
       enc_data: JSON.stringify({
         mobile_number: mobileNumber.trim(),
         device_id: deviceId,
         fcm_push_token: fcmPushToken,
+        random_no: randomNo,
       }),
     };
 
-    console.log(`📲 [AuthService] Requesting OTP for ${mobileNumber} on ${deviceModel} (DeviceID: ${deviceId})`);
+    if (!encryptionService.isEncryptionEnabled()) {
+      console.log(`📲 [AuthService] REQUEST GENERATE_OTP PAYLOAD:\n`, JSON.stringify(payload, null, 2));
+    }
 
     try {
       const response = await apiClient.post(
         API_CONFIG.ENDPOINTS.GENERATE_OTP,
         payload,
-        {requiresAuth: false},
+        { requiresAuth: false },
       );
 
-      // Backend returns data as JSON string, parse it
-      let parsedData: GenerateOtpResult;
+      let parsedData: GenerateOtpResult = {};
       if (typeof response.data === 'string') {
-        parsedData = JSON.parse(response.data);
-      } else {
+        try {
+          parsedData = JSON.parse(response.data);
+        } catch {
+          parsedData = {};
+        }
+      } else if (response.data) {
         parsedData = response.data;
       }
 
-      console.log('✅ [AuthService] OTP generated successfully:', parsedData);
+      if (!encryptionService.isEncryptionEnabled()) {
+        console.log(`📥 [AuthService] RESPONSE GENERATE_OTP:\n`, JSON.stringify(response, null, 2));
+        console.log(`📦 [AuthService] PARSED GENERATE_OTP DATA:\n`, JSON.stringify(parsedData, null, 2));
+      }
+
+      // Verify random_no anti-replay binding
+      if (parsedData?.random_no && String(parsedData.random_no) !== String(randomNo)) {
+        console.error(' [SecurityAlert] random_no mismatch in generateOtp! Sent:', randomNo, 'Received:', parsedData.random_no);
+        throw new Error('Could not authenticate api response.');
+      }
+
+      if (!parsedData.message && response.message) {
+        parsedData.message = response.message;
+      }
+
+      if (!encryptionService.isEncryptionEnabled()) {
+        console.log('✅ [AuthService] OTP generated successfully:', parsedData);
+      } else {
+        console.log('✅ [AuthService] OTP generated successfully');
+      }
       return parsedData;
     } catch (error: any) {
       console.error('❌ [AuthService] Error in generateOtp:', error?.message || error);
@@ -82,6 +119,7 @@ export const authService = {
     const deviceId = await storageService.getDeviceId();
     const deviceModel = storageService.getDeviceModel();
     const fcmPushToken = API_CONFIG.DEFAULT_FCM_TOKEN;
+    const randomNo = generateRandomNo();
 
     const payload = {
       enc_data: JSON.stringify({
@@ -89,19 +127,21 @@ export const authService = {
         otp: otp.trim(),
         device_id: deviceId,
         fcm_push_token: fcmPushToken,
+        random_no: randomNo,
       }),
     };
 
-    console.log(`🔐 [AuthService] Validating OTP for ${mobileNumber} on ${deviceModel} (DeviceID: ${deviceId})`);
+    if (!encryptionService.isEncryptionEnabled()) {
+      console.log(`🔐 [AuthService] REQUEST VALIDATE_OTP PAYLOAD:\n`, JSON.stringify(payload, null, 2));
+    }
 
     try {
       const response = await apiClient.post(
         API_CONFIG.ENDPOINTS.VALIDATE_OTP,
         payload,
-        {requiresAuth: false},
+        { requiresAuth: false },
       );
 
-      // Backend returns data as JSON string, parse it
       let sessionData: UserSession;
       if (typeof response.data === 'string') {
         sessionData = JSON.parse(response.data);
@@ -109,19 +149,39 @@ export const authService = {
         sessionData = response.data;
       }
 
+      if (!encryptionService.isEncryptionEnabled()) {
+        console.log(`📥 [AuthService] RESPONSE VALIDATE_OTP:\n`, JSON.stringify(response, null, 2));
+        console.log(`📦 [AuthService] PARSED VALIDATE_OTP SESSION DATA:\n`, JSON.stringify(sessionData, null, 2));
+      }
+
+      // Verify random_no anti-replay binding
+      if ((sessionData as any)?.random_no && String((sessionData as any).random_no) !== String(randomNo)) {
+        console.error('⛔ [SecurityAlert] random_no mismatch in validateOtp! Sent:', randomNo, 'Received:', (sessionData as any).random_no);
+        throw new Error('Could not authenticate api response.');
+      }
+
+      // Verify account binding (Prevents Replay Attacks with mismatched accounts - CWE-384)
+      if (sessionData && sessionData.mobile_no && sessionData.mobile_no.trim() !== mobileNumber.trim()) {
+        console.error('⛔ [SecurityAlert] Mismatched account verification detected! Expected:', mobileNumber.trim(), 'Received:', sessionData.mobile_no);
+        throw new Error('Security Error: Account verification mismatch. Login aborted.');
+      }
+
       // Persist user session to Local DB
       await storageService.saveUserSession(sessionData);
-      
-      // Store OTP for background silent re-login if session expires
-      await storageService.saveLastOtp(otp.trim());
 
-      console.log('🎉 [AuthService] OTP validated and session stored in Local DB:', sessionData);
-      
-      // Trigger token generation preemptively
+      if (!encryptionService.isEncryptionEnabled()) {
+        console.log('🎉 [AuthService] OTP validated and session stored in Local DB:', sessionData);
+      } else {
+        console.log('🎉 [AuthService] OTP validated successfully');
+      }
+
+      // Generate Bearer token upon successful OTP verification
       try {
+        console.log('[AuthService] OTP verified successfully! Generating access token from server...');
         await tokenManager.requestNewToken();
+        console.log(' [AuthService] Access token successfully generated and cached!');
       } catch (tokenErr) {
-        console.warn('⚠️ [AuthService] Token generation failed after OTP validation, will retry later:', tokenErr);
+        console.warn(' [AuthService] Token generation failed after OTP validation, will retry later:', tokenErr);
       }
 
       return sessionData;

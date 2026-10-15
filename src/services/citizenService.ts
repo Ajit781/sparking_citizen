@@ -24,6 +24,8 @@ export interface CitizenProfile {
   profile_complete: boolean;
   vehicle_owner_id: number;
   default_payment_mode_id?: number;
+  modified_on?: string;
+  message?: string;
 }
 
 export interface RegisterProfileParams {
@@ -192,7 +194,11 @@ class CitizenService {
       }),
     };
 
-    console.log(`📋 [CitizenService] Fetching profile for login_user_id: ${resolvedUserId}`);
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+      console.log(`📋 [CitizenService] Fetching profile for login_user_id: ${resolvedUserId}`);
+    } else {
+      console.log('📋 [CitizenService] Fetching citizen profile');
+    }
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.GET_CITIZEN_PROFILE, payload);
@@ -208,12 +214,16 @@ class CitizenService {
       profileData.modified_on = new Date().getTime().toString();
 
       this.cachedProfile = profileData;
-      console.log('✅ [CitizenService] Profile fetched successfully:', {
-        name: profileData.full_name,
-        complete: profileData.profile_complete,
-        score: calculateProfileCompletion(profileData),
-        imagePrefix: profileData.profile_pic ? profileData.profile_pic.substring(0, 30) : 'NO_IMAGE'
-      });
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('✅ [CitizenService] Profile fetched successfully:', {
+          name: profileData.full_name,
+          complete: profileData.profile_complete,
+          score: calculateProfileCompletion(profileData),
+          imagePrefix: profileData.profile_pic ? profileData.profile_pic.substring(0, 30) : 'NO_IMAGE'
+        });
+      } else {
+        console.log('✅ [CitizenService] Profile fetched successfully');
+      }
 
       return profileData;
     } catch (error: any) {
@@ -251,8 +261,12 @@ class CitizenService {
       enc_data: JSON.stringify(payloadData),
     };
 
-    console.log(`📝 [CitizenService] Registering profile for login_user_id: ${resolvedUserId}`);
-    console.log(`📝 [CitizenService] Profile image length being sent: ${payloadData.profile_pic ? payloadData.profile_pic.length : 0}`);
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+      console.log(`📝 [CitizenService] Registering profile for login_user_id: ${resolvedUserId}`);
+      console.log(`📝 [CitizenService] Profile image length being sent: ${payloadData.profile_pic ? payloadData.profile_pic.length : 0}`);
+    } else {
+      console.log('📝 [CitizenService] Registering citizen profile');
+    }
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.REGISTER_CITIZEN_PROFILE, payload);
@@ -267,7 +281,9 @@ class CitizenService {
       // Backend does not return modified_on for profile, so we inject a timestamp to bust cache
       registeredData.modified_on = new Date().getTime().toString();
 
-      console.log(`📝 [CitizenService] Profile register returned: ${JSON.stringify(registeredData)}`);
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log(`📝 [CitizenService] Profile register returned: ${JSON.stringify(registeredData)}`);
+      }
 
       this.cachedProfile = registeredData;
 
@@ -282,8 +298,15 @@ class CitizenService {
         };
         await storageService.saveUserSession(updatedSession);
       }
+      if (registeredData && typeof registeredData === 'object') {
+        (registeredData as any).message = response.message || (registeredData as any).message;
+      }
 
-      console.log('🎉 [CitizenService] Profile registered successfully:', registeredData);
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('🎉 [CitizenService] Profile registered successfully:', registeredData);
+      } else {
+        console.log('🎉 [CitizenService] Profile registered successfully');
+      }
       return registeredData;
     } catch (error: any) {
       console.error('❌ [CitizenService] Error registering profile:', error?.message || error);
@@ -324,13 +347,32 @@ class CitizenService {
       enc_data: JSON.stringify(payloadData),
     };
 
-    console.log(`🚗 [CitizenService] Adding vehicle for login_user_id: ${resolvedUserId}, type: ${params.vehicle_type_id}`);
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+      console.log(`🚗 [CitizenService] Adding vehicle for login_user_id: ${resolvedUserId}, type: ${params.vehicle_type_id}`);
+    } else {
+      console.log('🚗 [CitizenService] Adding vehicle');
+    }
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.ADD_CITIZEN_VEHICLE, payload);
 
-      console.log('✅ [CitizenService] Vehicle added successfully:', response.data);
-      return response.data;
+      let data = response.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch {}
+      }
+      if (!data || typeof data !== 'object') {
+        data = {};
+      }
+      if (!data.message && response.message) {
+        data.message = response.message;
+      }
+
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('✅ [CitizenService] Vehicle added successfully:', data);
+      } else {
+        console.log('✅ [CitizenService] Vehicle added successfully');
+      }
+      return data;
     } catch (error: any) {
       console.error('❌ [CitizenService] Error adding vehicle:', error?.message || error);
       throw error;
@@ -371,12 +413,31 @@ class CitizenService {
       enc_data: JSON.stringify(payloadData),
     };
 
-    console.log(`🚗 [CitizenService] Updating vehicle for login_user_id: ${resolvedUserId}, vehicle_id: ${params.vehicle_id}`);
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+      console.log(`🚗 [CitizenService] Updating vehicle for login_user_id: ${resolvedUserId}, vehicle_id: ${params.vehicle_id}`);
+    } else {
+      console.log('🚗 [CitizenService] Updating vehicle');
+    }
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.UPDATE_CITIZEN_VEHICLE, payload);
-      console.log('✅ [CitizenService] Vehicle updated successfully:', response.data);
-      return response.data;
+      let data = response.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch {}
+      }
+      if (!data || typeof data !== 'object') {
+        data = {};
+      }
+      if (!data.message && response.message) {
+        data.message = response.message;
+      }
+
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('✅ [CitizenService] Vehicle updated successfully:', data);
+      } else {
+        console.log('✅ [CitizenService] Vehicle updated successfully');
+      }
+      return data;
     } catch (error: any) {
       console.error('❌ [CitizenService] Error updating vehicle:', error?.message || error);
       throw error;
@@ -407,12 +468,31 @@ class CitizenService {
       enc_data: JSON.stringify(payloadData),
     };
 
-    console.log(`🚗 [CitizenService] Deleting vehicle for login_user_id: ${resolvedUserId}, vehicle_id: ${vehicleId}`);
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+      console.log(`🚗 [CitizenService] Deleting vehicle for login_user_id: ${resolvedUserId}, vehicle_id: ${vehicleId}`);
+    } else {
+      console.log('🚗 [CitizenService] Deleting vehicle');
+    }
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.DELETE_CITIZEN_VEHICLE, payload);
-      console.log('✅ [CitizenService] Vehicle deleted successfully:', response.data);
-      return response.data;
+      let data = response.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch {}
+      }
+      if (!data || typeof data !== 'object') {
+        data = {};
+      }
+      if (!data.message && response.message) {
+        data.message = response.message;
+      }
+
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('✅ [CitizenService] Vehicle deleted successfully:', data);
+      } else {
+        console.log('✅ [CitizenService] Vehicle deleted successfully');
+      }
+      return data;
     } catch (error: any) {
       console.error('❌ [CitizenService] Error deleting vehicle:', error?.message || error);
       throw error;
@@ -440,7 +520,11 @@ class CitizenService {
       }),
     };
 
-    console.log(`🚗 [CitizenService] Fetching vehicles for login_user_id: ${resolvedUserId}`);
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+      console.log(`🚗 [CitizenService] Fetching vehicles for login_user_id: ${resolvedUserId}`);
+    } else {
+      console.log('🚗 [CitizenService] Fetching vehicles');
+    }
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.GET_CITIZEN_VEHICLES, payload);
@@ -448,7 +532,11 @@ class CitizenService {
       if (typeof vehicleData === 'string') {
         vehicleData = JSON.parse(vehicleData);
       }
-      console.log('✅ [CitizenService] Vehicles fetched successfully:', vehicleData);
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('✅ [CitizenService] Vehicles fetched successfully:', vehicleData);
+      } else {
+        console.log('✅ [CitizenService] Vehicles fetched successfully');
+      }
       return Array.isArray(vehicleData?.vehicles) ? vehicleData.vehicles : [];
     } catch (error: any) {
       console.error('❌ [CitizenService] Error fetching vehicles:', error?.message || error);
@@ -559,9 +647,11 @@ class CitizenService {
         enc_data: JSON.stringify(encDataObj)
       };
 
-      console.log('--- GET NEARBY PARKING PAYLOAD ---');
-      console.log(JSON.stringify(encDataObj, null, 2));
-      console.log('----------------------------------');
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('--- GET NEARBY PARKING PAYLOAD ---');
+        console.log(JSON.stringify(encDataObj, null, 2));
+        console.log('----------------------------------');
+      }
 
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.GET_NEARBY_PARKING_AREAS, payload);
 
@@ -602,7 +692,11 @@ class CitizenService {
         enc_data: JSON.stringify(payloadData),
       };
 
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
       console.log(`🅿️ [CitizenService] Fetching details for parking area ID: ${parkingAreaId}`);
+    } else {
+      console.log('🅿️ [CitizenService] Fetching parking area details');
+    }
 
       try {
         const response = await apiClient.post(API_CONFIG.ENDPOINTS.GET_CITIZEN_PARKING_AREA_DETAILS, payload);
@@ -616,7 +710,11 @@ class CitizenService {
               console.warn('Failed to parse parking area details data string');
             }
           }
-          console.log(`📋 [CitizenService] getCitizenParkingAreaDetails Response Data:`, JSON.stringify(data, null, 2));
+          if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+            console.log(`📋 [CitizenService] getCitizenParkingAreaDetails Response Data:`, JSON.stringify(data, null, 2));
+          } else {
+            console.log('📋 [CitizenService] Parking area details loaded successfully');
+          }
           return data;
         } else {
           throw new Error(response.message || 'Failed to fetch parking area details');
@@ -705,8 +803,12 @@ class CitizenService {
       enc_data: JSON.stringify(payloadData),
     };
 
-    console.log(`🅿️ [CitizenService] Creating booking for user: ${resolvedUserId}, parking_area: ${params.parking_area_id}`);
-    console.log(`📦 [CitizenService] Booking Payload:`, JSON.stringify(payloadData, null, 2));
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+      console.log(`🅿️ [CitizenService] Creating booking for user: ${resolvedUserId}, parking_area: ${params.parking_area_id}`);
+      console.log(`📦 [CitizenService] Booking Payload:`, JSON.stringify(payloadData, null, 2));
+    } else {
+      console.log('🅿️ [CitizenService] Creating booking');
+    }
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.CREATE_CITIZEN_BOOKING, payload);
@@ -720,7 +822,18 @@ class CitizenService {
         }
       }
 
-      console.log('✅ [CitizenService] Booking created successfully:', data);
+      if (!data || typeof data !== 'object') {
+        data = {};
+      }
+      if (!data.message && response.message) {
+        data.message = response.message;
+      }
+
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('✅ [CitizenService] Booking created successfully:', data);
+      } else {
+        console.log('✅ [CitizenService] Booking created successfully');
+      }
       return data;
     } catch (error: any) {
       console.error('❌ [CitizenService] Error creating booking:', error?.message || error);
@@ -749,7 +862,11 @@ class CitizenService {
       }),
     };
 
-    console.log(`📋 [CitizenService] Fetching bookings for user: ${resolvedUserId}, status: ${status}`);
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+      console.log(`📋 [CitizenService] Fetching bookings for user: ${resolvedUserId}, status: ${status}`);
+    } else {
+      console.log('📋 [CitizenService] Fetching bookings');
+    }
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.GET_CITIZEN_BOOKINGS, payload);
@@ -819,13 +936,25 @@ class CitizenService {
       enc_data: JSON.stringify(payloadData),
     };
 
-    console.log(`📣 [CitizenService] Posting grievance for login_user_id: ${resolvedUserId}`);
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+      console.log(`📣 [CitizenService] Posting grievance for login_user_id: ${resolvedUserId}`);
+    } else {
+      console.log('📣 [CitizenService] Posting grievance');
+    }
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.POST_CITIZEN_GRIEVANCE, payload);
       let data = response.data;
       if (typeof data === 'string') {
-        data = JSON.parse(data);
+        try {
+          data = JSON.parse(data);
+        } catch {}
+      }
+      if (!data || typeof data !== 'object') {
+        data = {};
+      }
+      if (!data.message && response.message) {
+        data.message = response.message;
       }
       return data;
     } catch (error: any) {
@@ -859,7 +988,11 @@ class CitizenService {
       enc_data: JSON.stringify(payloadData),
     };
 
-    console.log(`📋 [CitizenService] Fetching grievances for login_user_id: ${resolvedUserId}`, JSON.stringify(payloadData, null, 2));
+    if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+      console.log(`📋 [CitizenService] Fetching grievances for login_user_id: ${resolvedUserId}`, JSON.stringify(payloadData, null, 2));
+    } else {
+      console.log('📋 [CitizenService] Fetching grievances');
+    }
 
     try {
       const response = await apiClient.post(API_CONFIG.ENDPOINTS.GET_CITIZEN_GRIEVANCES, payload);

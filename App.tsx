@@ -24,6 +24,7 @@ import MyGrievancesScreen from './src/screens/MyGrievancesScreen';
 import { authService, GenerateOtpResult } from './src/services/authService';
 import { UserSession } from './src/services/storageService';
 import { citizenService } from './src/services/citizenService';
+import { enforceSecurityRules } from './src/utils/securityCheck';
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenName | null>(null);
@@ -47,7 +48,7 @@ export default function App() {
   useEffect(() => {
     const onBackPress = () => {
       if (showSplash) return true; // block back button during splash
-      
+
       if (!screen || ['login', 'home', 'guide1', 'guide2', 'guide3'].includes(screen)) {
         Alert.alert('Exit App', 'Are you sure you want to exit S-Parking?', [
           { text: 'Cancel', style: 'cancel' },
@@ -55,7 +56,7 @@ export default function App() {
         ]);
         return true;
       }
-      
+
       const backMap: Partial<Record<ScreenName, ScreenName>> = {
         'otp': 'login',
         'dashboard': 'home',
@@ -70,13 +71,13 @@ export default function App() {
         'setup': 'home',
         'permission': 'home'
       };
-      
+
       const prevScreen = backMap[screen];
       if (prevScreen) {
         setScreen(prevScreen);
         return true;
       }
-      
+
       return false;
     };
 
@@ -85,11 +86,17 @@ export default function App() {
   }, [screen, showSplash]);
 
   const handleSplashNext = async () => {
+    const isSafe = await enforceSecurityRules();
+    if (!isSafe) {
+      console.warn(' [App] Insecure device detected. Halting navigation.');
+      return;
+    }
+
     let nextScreen: ScreenName = 'guide1';
     try {
       const stored = await authService.getStoredSession();
       if (stored && stored.mobile_no) {
-        console.log('✅ Stored citizen session found for', stored.mobile_no, '-> Opening Home');
+        console.log(' Stored citizen session found for', stored.mobile_no, '-> Opening Home');
         nextScreen = 'home';
       }
     } catch (e) {
@@ -152,65 +159,65 @@ export default function App() {
     ) : screen === 'permission' ? (
       <PermissionScreen onNext={() => setScreen('home')} />
     ) : screen === 'home' ? null
-    : screen === 'dashboard' ? (
-      <DashboardScreen go={handleNavigate} />
-    ) : screen === 'parkingDetails' ? (
-      <ParkingDetailsScreen
-        onBack={() => setScreen('home')}
-        onReserveSlot={() => setScreen('reserveSlot')}
-        onAddVehicle={() => {
-          setEditingVehicle(null);
-          setScreen('addVehicle');
-        }}
-      />
-    ) : screen === 'reserveSlot' ? (
-      <ReserveParkingScreen
-        onBack={() => setScreen('parkingDetails')}
-        onBookSuccess={() => setScreen('booking')}
-      />
-    ) : screen === 'booking' ? (
-      <BookingScreen
-        onBack={() => setScreen('home')}
-        onBookNew={() => setScreen('home')}
-      />
-    ) : screen === 'vehicles' ? (
-      <VehiclesScreen
-        onBack={() => setScreen('profile')}
-        onAdd={() => {
-          setEditingVehicle(null);
-          setScreen('addVehicle');
-        }}
-        onEdit={(vehicle) => {
-          setEditingVehicle(vehicle);
-          setScreen('addVehicle');
-        }}
-      />
-    ) : screen === 'addVehicle' ? (
-      <AddVehicleScreen
-        vehicle={editingVehicle}
-        onBack={() => setScreen('vehicles')}
-        onVehicleAdded={() => setScreen('vehicles')}
-      />
-    ) : screen === 'profile' ? (
-      <ProfileScreen
-        onVehicles={() => setScreen('vehicles')}
-        onGrievance={() => setScreen('postGrievance')}
-        onMyGrievances={() => setScreen('myGrievances')}
-        onLogout={() => setScreen('login')}
-        onBooking={() => setScreen('booking')}
-        onSetupProfile={() => setScreen('setup')}
-      />
-    ) : screen === 'postGrievance' ? (
-      <PostGrievanceScreen
-        onBack={() => setScreen('profile')}
-        onSubmitted={() => setScreen('myGrievances')}
-      />
-    ) : (
-      <MyGrievancesScreen 
-        onBack={() => setScreen('profile')} 
-        onPostGrievance={() => setScreen('postGrievance')}
-      />
-    );
+      : screen === 'dashboard' ? (
+        <DashboardScreen go={handleNavigate} />
+      ) : screen === 'parkingDetails' ? (
+        <ParkingDetailsScreen
+          onBack={() => setScreen('home')}
+          onReserveSlot={() => setScreen('reserveSlot')}
+          onAddVehicle={() => {
+            setEditingVehicle(null);
+            setScreen('addVehicle');
+          }}
+        />
+      ) : screen === 'reserveSlot' ? (
+        <ReserveParkingScreen
+          onBack={() => setScreen('parkingDetails')}
+          onBookSuccess={() => setScreen('booking')}
+        />
+      ) : screen === 'booking' ? (
+        <BookingScreen
+          onBack={() => setScreen('home')}
+          onBookNew={() => setScreen('home')}
+        />
+      ) : screen === 'vehicles' ? (
+        <VehiclesScreen
+          onBack={() => setScreen('profile')}
+          onAdd={() => {
+            setEditingVehicle(null);
+            setScreen('addVehicle');
+          }}
+          onEdit={(vehicle) => {
+            setEditingVehicle(vehicle);
+            setScreen('addVehicle');
+          }}
+        />
+      ) : screen === 'addVehicle' ? (
+        <AddVehicleScreen
+          vehicle={editingVehicle}
+          onBack={() => setScreen('vehicles')}
+          onVehicleAdded={() => setScreen('vehicles')}
+        />
+      ) : screen === 'profile' ? (
+        <ProfileScreen
+          onVehicles={() => setScreen('vehicles')}
+          onGrievance={() => setScreen('postGrievance')}
+          onMyGrievances={() => setScreen('myGrievances')}
+          onLogout={() => setScreen('login')}
+          onBooking={() => setScreen('booking')}
+          onSetupProfile={() => setScreen('setup')}
+        />
+      ) : screen === 'postGrievance' ? (
+        <PostGrievanceScreen
+          onBack={() => setScreen('profile')}
+          onSubmitted={() => setScreen('myGrievances')}
+        />
+      ) : (
+        <MyGrievancesScreen
+          onBack={() => setScreen('profile')}
+          onPostGrievance={() => setScreen('postGrievance')}
+        />
+      );
 
   const showBottomNav = screen ? ['home', 'booking', 'profile', 'setup', 'myGrievances', 'postGrievance'].includes(screen) : false;
 

@@ -1,5 +1,6 @@
 import { API_CONFIG } from '../config/api.config';
 import { tokenManager } from './tokenManager';
+import { encryptionService } from './encryptionService';
 
 export interface RequestOptions extends RequestInit {
   requiresAuth?: boolean;
@@ -41,8 +42,35 @@ export class ApiClient {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      // Auto-encrypt payload enc_data with AES-256-GCM if in Production / Encryption enabled
+      let finalBody = restOptions.body;
+      const isEncrypted = encryptionService.isEncryptionEnabled();
+
+      if (restOptions.body && isEncrypted) {
+        try {
+          const parsed = typeof restOptions.body === 'string' ? JSON.parse(restOptions.body) : restOptions.body;
+          if (parsed && parsed.enc_data) {
+            const encryptedData = await encryptionService.encrypt(parsed.enc_data);
+            finalBody = JSON.stringify({
+              ...parsed,
+              enc_data: encryptedData,
+            });
+            console.log(`🌐 [ApiClient] [PRODUCTION ENCRYPTED REQUEST] --> ${restOptions.method || 'POST'} ${url}`);
+            console.log(`🔒 [ApiClient] [ENCRYPTED ON-THE-WIRE REQUEST BODY]:\n`, finalBody);
+          }
+        } catch (e) {
+          console.warn('⚠️ [ApiClient] Auto-encryption skipped:', e);
+        }
+      } else {
+        console.log(`🌐 [ApiClient] [STAGING REQUEST] --> ${restOptions.method || 'GET'} ${url}`);
+        if (finalBody) {
+          console.log(`📝 [ApiClient] [STAGING PLAINTEXT REQUEST BODY]:\n`, finalBody);
+        }
+      }
+
       let response = await fetch(url, {
         ...restOptions,
+        body: finalBody,
         headers: finalHeaders,
         signal: controller.signal,
       });
@@ -53,43 +81,6 @@ export class ApiClient {
         tokenManager.clearToken();
         const freshToken = await tokenManager.getValidToken();
         finalHeaders.Authorization = `Bearer ${freshToken}`;
-
-        // Silent Background Session Refresh: Re-verify OTP to re-establish backend session
-        try {
-          const { storageService } = require('./storageService');
-          const session = await storageService.getUserSession();
-          const lastOtp = await storageService.getLastOtp();
-
-          if (session?.mobile_no && lastOtp) {
-            console.log('🔄 [ApiClient] Backend session might be expired. Attempting silent re-login with stored OTP...');
-
-            const silentPayload = {
-              enc_data: JSON.stringify({
-                mobile_number: session.mobile_no,
-                otp: lastOtp,
-                device_id: await storageService.getDeviceId(),
-                fcm_push_token: API_CONFIG.DEFAULT_FCM_TOKEN,
-              }),
-            };
-
-            const silentResponse = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.VALIDATE_OTP}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-              },
-              body: JSON.stringify(silentPayload),
-            });
-
-            if (silentResponse.ok) {
-              console.log('✅ [ApiClient] Silent background re-login successful!');
-            } else {
-              console.warn('⚠️ [ApiClient] Silent background re-login failed:', silentResponse.status);
-            }
-          }
-        } catch (silentErr) {
-          console.error('❌ [ApiClient] Error during silent background re-login:', silentErr);
-        }
 
         response = await fetch(url, {
           ...restOptions,
@@ -112,7 +103,52 @@ export class ApiClient {
         }
       }
 
-      console.log(`📥 [ApiClient] Response from ${endpoint}:`, data?.status || response.status, data?.message || '');
+      if (isEncrypted) {
+        console.log(`📥 [ApiClient] [ENCRYPTED INCOMING RESPONSE] <-- ${url} (HTTP ${response.status}):\n${rawText}`);
+        if (data && typeof data.data === 'string') {
+          const trimmed = data.data.trim();
+          if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+            try {
+              const decrypted = await encryptionService.decrypt(data.data);
+              data.data = decrypted;
+            } catch (e) {
+              console.warn('⚠️ [ApiClient] Auto-decryption skipped:', e);
+            }
+          }
+        }
+      } else {
+        console.log(`📥 [ApiClient] [STAGING RESPONSE] <-- ${url} (HTTP ${response.status}):\n${rawText}`);
+      }
+
+      console.log(`📊 [ApiClient] Status from ${endpoint}:`, data?.status || response.status, data?.message || '');
+
+      // Anti-Replay: Verify random_no if present in request enc_data
+      if (restOptions.body) {
+        try {
+          const reqBody = typeof restOptions.body === 'string' ? JSON.parse(restOptions.body) : restOptions.body;
+          if (reqBody && reqBody.enc_data) {
+            const encObj = typeof reqBody.enc_data === 'string' ? JSON.parse(reqBody.enc_data) : reqBody.enc_data;
+            if (encObj && encObj.random_no) {
+              const reqRandomNo = String(encObj.random_no);
+              let respDataObj: any = null;
+              if (typeof data?.data === 'string') {
+                try { respDataObj = JSON.parse(data.data); } catch {}
+              } else if (typeof data?.data === 'object') {
+                respDataObj = data.data;
+              }
+              const respRandomNo = respDataObj?.random_no || data?.random_no;
+              if (respRandomNo && String(respRandomNo) !== reqRandomNo) {
+                console.error('⛔ [SecurityAlert] random_no mismatch detected! Sent:', reqRandomNo, 'Received:', respRandomNo);
+                throw new Error('Could not authenticate api response.');
+              }
+            }
+          }
+        } catch (e: any) {
+          if (e.message === 'Could not authenticate api response.') {
+            throw e;
+          }
+        }
+      }
 
       // Check for HTTP failure or Backend Application Failure (status !== 'GEN_000' and status !== 'success')
       if (!response.ok || (data?.status && data.status !== 'GEN_000' && data.status !== 'success')) {

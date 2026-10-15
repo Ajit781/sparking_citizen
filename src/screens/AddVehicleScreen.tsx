@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ImageCropPicker from 'react-native-image-crop-picker';
 import UmangSkylineFooter from '../components/UmangSkylineFooter';
 import CarLoader from '../components/CarLoader';
-import LoadingOverlay from '../components/LoadingOverlay';
 import { getErrorMessage } from '../utils/errorUtils';
 import ErrorModal from '../components/ErrorModal';
 import VisionCamera from '../components/VisionCamera';
@@ -26,6 +25,7 @@ import { colors } from '../theme/colors';
 import { citizenService } from '../services/citizenService';
 import { DEFAULT_VEHICLE_IMAGE_BASE64, getVehicleImageSource } from '../constants/defaultVehicleImage';
 import CivicNavbar from '../components/CivicNavbar';
+import { API_CONFIG } from '../config/api.config';
 
 interface AddVehicleScreenProps {
   vehicle?: any;
@@ -129,6 +129,7 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
   const [showTypeModal, setShowTypeModal] = useState(false);
   const [showColorModal, setShowColorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalMessage, setSuccessModalMessage] = useState('');
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
   const [showVisionCamera, setShowVisionCamera] = useState(false);
   const [vehicleImage, setVehicleImage] = useState<string>(
@@ -230,18 +231,22 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
         vehicle_image: vehicleImage && vehicleImage !== DEFAULT_VEHICLE_IMAGE_BASE64 ? vehicleImage : '',
       };
 
-      console.log('🚗 [VehicleUpdate] Image length:', payload.vehicle_image.length, 'Prefix:', payload.vehicle_image.substring(0, 30));
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('🚗 [VehicleUpdate] Image length:', payload.vehicle_image.length, 'Prefix:', payload.vehicle_image.substring(0, 30));
+      }
 
+      let result;
       if (vehicle) {
-        await citizenService.updateCitizenVehicle({
+        result = await citizenService.updateCitizenVehicle({
           ...payload,
           vehicle_id: vehicle.vehicle_id,
         });
       } else {
-        await citizenService.addCitizenVehicle(payload);
+        result = await citizenService.addCitizenVehicle(payload);
       }
 
       setIsLoading(false);
+      setSuccessModalMessage(result?.message || `Vehicle ${vehicleNumber.toUpperCase()} has been successfully saved to your profile.`);
       setShowSuccessModal(true);
     } catch (err: any) {
       setIsLoading(false);
@@ -681,7 +686,7 @@ export default function AddVehicleScreen({ vehicle, onBack, onVehicleAdded }: Ad
               Vehicle {vehicle ? 'Updated' : 'Added'}!
             </Text>
             <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginBottom: 20, paddingHorizontal: 8, lineHeight: 18 }}>
-              Vehicle <Text style={{ fontWeight: '800', color: '#0F172A' }}>{vehicleNumber.toUpperCase()}</Text> has been successfully saved to your profile.
+              {successModalMessage}
             </Text>
 
             <Pressable

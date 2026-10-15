@@ -23,6 +23,7 @@ import { colors } from '../theme/colors';
 import { citizenService, calculateProfileCompletion } from '../services/citizenService';
 import { storageService, UserSession } from '../services/storageService';
 import { authService } from '../services/authService';
+import { API_CONFIG } from '../config/api.config';
 import {
   getCitizenAvatarSource,
   getCleanBase64,
@@ -59,11 +60,11 @@ export default function SetupProfileScreen({ onBack, onSuccess, onLogout }: Setu
   const [isFetching, setIsFetching] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  // Success Modal State
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showVisionCamera, setShowVisionCamera] = useState(false);
   const [successName, setSuccessName] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Dynamic progress calculation
   const currentCompletion = calculateProfileCompletion({
@@ -242,7 +243,9 @@ export default function SetupProfileScreen({ onBack, onSuccess, onLogout }: Setu
     setIsLoading(true);
     try {
       const cleanB64 = getCleanBase64(profilePic);
-      console.log('🖼️ [ProfileUpdate] Image length:', cleanB64.length, 'Prefix:', cleanB64.substring(0, 30));
+      if (!API_CONFIG.ENV.ENABLE_ENCRYPTION) {
+        console.log('🖼️ [ProfileUpdate] Image length:', cleanB64.length, 'Prefix:', cleanB64.substring(0, 30));
+      }
 
       const result = await citizenService.registerCitizenProfile({
         login_user_id: session?.login_user_id,
@@ -256,6 +259,7 @@ export default function SetupProfileScreen({ onBack, onSuccess, onLogout }: Setu
 
       setIsLoading(false);
       setSuccessName(result.full_name || fullName);
+      setSuccessMessage(result?.message || 'Your Citizen Profile has been verified & saved securely.');
       setShowSuccessModal(true);
     } catch (error: any) {
       setIsLoading(false);
@@ -558,7 +562,7 @@ export default function SetupProfileScreen({ onBack, onSuccess, onLogout }: Setu
 
             <Text style={s.promptTitle}>Profile Completed! 🎉</Text>
             <Text style={s.promptDesc}>
-              Welcome {successName}! Your Citizen Profile has been verified & saved securely.
+              {successMessage ? `Welcome ${successName}! ${successMessage}` : `Welcome ${successName}! Your Citizen Profile has been verified & saved securely.`}
             </Text>
 
             <View style={s.promptChecklist}>

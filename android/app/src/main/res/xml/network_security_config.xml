@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- By default, only trust system-installed CAs (blocks user-installed CA certificates like Burp Suite / Charles Proxy) -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- SSL Pinning for main API domain vigpl.com -->
+    <domain-config>
+        <domain includeSubdomains="true">vigpl.com</domain>
+        <pin-set expiration="2027-12-31">
+            <!-- vigpl.com leaf certificate SHA-256 pin -->
+            <pin digest="SHA-256">TwuMfUzYwCT6Ns3A889Ah2/bpj4khfQMhIqfaWqoPQA=</pin>
+            <!-- Go Daddy Secure Certificate Authority - G2 (Intermediate Backup) -->
+            <pin digest="SHA-256">8Rw90Ej3Ttt8RRkrg+WYDS9n7IS03bk5bjP/UXPtaY8=</pin>
+            <!-- Go Daddy Root Certificate Authority - G2 (Root Backup) -->
+            <pin digest="SHA-256">Ko8tivDrEjiY90yGasP6ZpBU4jwXvHqVvQI0GS3GNdA=</pin>
+        </pin-set>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- SSL Pinning for version check & gateway domain s-parking.com -->
+    <domain-config>
+        <domain includeSubdomains="true">s-parking.com</domain>
+        <pin-set expiration="2027-12-31">
+            <!-- s-parking.com leaf certificate SHA-256 pin -->
+            <pin digest="SHA-256">Qf4/8rfmMl2EtXOxOKJGesM/+OJdi3J84wIPbQN2P5M=</pin>
+            <!-- GoDaddy TLS Intermediate CA DV - R1v1 (Intermediate Backup) -->
+            <pin digest="SHA-256">Y1e/3DqsL/yWI4RIaJ4OfhLEW5JiJoNKFVF1AxFqkiA=</pin>
+            <!-- Go Daddy Root Certificate Authority - G2 (Root Backup) -->
+            <pin digest="SHA-256">Ko8tivDrEjiY90yGasP6ZpBU4jwXvHqVvQI0GS3GNdA=</pin>
+        </pin-set>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- Allow Metro Bundler for local development & debugging -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

@@ -94,7 +94,7 @@ export default function OtpScreen({
       setIsResending(false);
       setCountdown(result.resend_after_seconds || 45);
       setCanResend(false);
-      setSuccessMessage('A new OTP has been sent successfully.');
+      setSuccessMessage(result?.message || 'A new OTP has been sent successfully.');
     } catch (error: any) {
       setIsResending(false);
       const message = getErrorMessage(error, 'Failed to resend OTP. Please try again.');
